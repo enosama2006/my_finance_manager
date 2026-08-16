@@ -1,44 +1,59 @@
-# MyFinMan — Cycle 1 Domain Rules
+# MyFinMan — Domain Invariants V4 (Repository Copy)
 
-هذه القواعد جزء من النموذج المالي وليست تفاصيل UI.
+هذا الملخص هو المرجع التنفيذي داخل المستودع. عند التعارض: أحدث تعليمات مباشرة للمستخدم ثم Domain Invariants V4 ثم Project Reference V4 ثم Foundation Brief V4 ثم الكود.
 
-## المال الحقيقي مقابل الغرض
+## Core reality
+- الحساب/الحافظ = أين توجد القيمة.
+- الأصل/Holding = ماذا وكم.
+- المالك الاقتصادي = لمن.
+- Portfolio = لأي غرض/وعاء.
+- المتوقع والمسودة والخطة لا تغير الواقع المالي.
+- Opening صريح ولا يخترع حركة تاريخية.
 
-- العملية المنشورة في حساب حقيقي لا تُنقل إلى حساب آخر بعد وقوعها.
-- `Real Transfer` فقط يغير مكان المال الحقيقي.
-- `Reallocation` يغير الغرض أو التغطية المنطقية ولا يحرك المال الحقيقي.
-- `Expected Income` لا يرفع الرصيد حتى يصبح دخلًا منشورًا فعليًا.
-- `Available` هو الجزء غير المخصص، وليس الرصيد البنكي نفسه.
+## Accounts and custody
+- الحسابات تماثل الواقع وتملك Stable IDs وحالة active/closed/archived.
+- Debit وسيلة وصول، Prepaid وعاء إن حمل رصيدًا، Credit Card التزام.
+- Custodian مستقل عن Geographic Location.
+- إغلاق الحساب/البطاقة لا يحذف التاريخ.
 
-## الملكية والحيازة
+## Assets, ownership and portfolios
+- Asset Class لا يساوي Portfolio.
+- Portfolio والمخصص كيان واحد شجري.
+- Portfolio قد تمتد عبر عدة Accounts/Assets والعكس.
+- Available = حصة Holding غير المقيدة بمحفظة.
+- أموال مالك آخر لا تستخدم ضمنيًا.
+- نقل القيمة بين ملاك يحتاج Gift/Loan/Debt/Ownership event صريحًا.
+- Custody لا تعني Ownership؛ Claim لا يساوي Physical Asset held by another party.
 
-- `Ownership` يجيب: لمن تعود الثروة؟
-- `Custody` يجيب: من يحوز الأصل الآن؟
-- `Location` يجيب: أين يوجد الأصل؟
-- `Allocation` يجيب: لأي غرض تم تخصيصه؟
-- `Claim/Receivable` يختلف عن أصل عيني محفوظ لدى طرف آخر.
-- الحيازة لا تنقل الملكية ضمنيًا، ولا يجوز احتساب الأصل مرتين.
-- مجموع `Ownership Shares` لكل Holding يجب أن يساوي الكمية الفيزيائية الأصلية.
+## Quantities and valuation
+- Physical Native Quantity لا تتغير بتغير السعر.
+- مجموع Ownership Shares يساوي كمية Holding.
+- Portfolio Slices لا تتجاوز ملكية Owner في Holding.
+- Current Value يظهر معه valuation method/source/time.
+- Market/FX/manual valuation لا ينشئ Transaction أو Income.
+- Unknown cost يدخل في Current Wealth ويُستبعد من return-on-cost.
 
-مثال: 500 غرام فضة مملوكة للمستخدم ومحفوظة لدى شخص آخر تدخل في ثروة المستخدم، لا في ثروة الحائز.
+## Cost and P/L
+- Unrealized P/L منفصل عن Realized P/L.
+- Realized P/L ينشأ عند Conversion/Disposal الحقيقي فقط.
+- بيع الأصل يحول الأصل إلى نقد؛ كامل الحصيلة ليست Income.
+- Conversion يحدد source quantity، target quantity، execution value/rate، fees، owner، source/target portfolio/account.
+- لا يجوز استهلاك Portfolio-protected quantity دون اختيار صريح.
 
-## تحويل أصل إلى أصل
+## Transactions and revisions
+- Logical Transaction الظاهرة للمستخدم تمثل حقيقة واحدة.
+- Correction لخطأ الإدخال يجب أن يبقي نفس Transaction ID ويضيف Revision/Audit داخليًا، ثم يعيد حساب الآثار Atomic بعد Preview.
+- Refund/Reversal/Transfer حدث في الواقع = Transaction جديدة مرتبطة بالأصل.
+- Unknown mismatch = Reconciliation Adjustment، لا اختراع تاجر/فئة.
 
-يُسجل `Asset Conversion` عندما يتحول أصل مختلف إلى أصل مختلف، مثل:
+## Settlement and cards
+- Payment Source قد يختلف عن Portfolio Funding Source.
+- التغطية المباشرة تحتاج تطابق Native Asset.
+- نقص تمويل Portfolio لا يرفض Expense؛ ينشئ Clearing/Funding Gap.
+- Credit-card purchase = Expense + Liability.
+- Card payment يقلل cash + liability ولا ينشئ Expense ثانية.
 
-- USD → SAR
-- ذهب → USD
-- فضة → ذهب
-
-ويحفظ الحدث:
-
-- كمية الأصل الخارج.
-- كمية الأصل الداخل.
-- معدل التحويل الفعلي.
-- قيمة وحدة الأصل الداخل بالعملة المرجعية وقت التنفيذ.
-- الرسوم.
-- Cost Basis للأصل الخارج.
-- Realized Gain/Loss.
-- المالك الذي تخصه العملية.
-
-`Realized Gain/Loss` لا يُنشأ بسبب ارتفاع السعر فقط، ولا بسبب نقل الأصل بين حسابات أو حائزين، ولا بسبب إعادة تخصيصه. ينشأ فقط عند Conversion/Disposal حقيقي.
+## AI
+- AI يقترح Drafts فقط؛ deterministic rules تتحقق والمستخدم يعتمد.
+- Duplicate Detection يسبق posting.
+- AI لا يخترع حسابًا أو ملكية أو تحويلًا أو مصدر دفع.
