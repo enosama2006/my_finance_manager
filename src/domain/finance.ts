@@ -83,16 +83,24 @@ export function ownerWeightedAverageCostSar(holding: Holding, ownerId: string): 
   return round2(lots.reduce((sum, lot) => sum + lot.quantity * (lot.unitCostSar ?? 0), 0) / quantity)
 }
 
-function reduceOwnerCostLots(lots: CostBasisLot[], ownerId: string, quantity: number): CostBasisLot[] {
-  let remaining = quantity
+function reduceOwnerCostLotsWeightedAverage(lots: CostBasisLot[], ownerId: string, quantity: number): CostBasisLot[] {
   const ownerLots = lots.filter((lot) => lot.ownerId === ownerId)
-  const total = ownerLots.reduce((sum, lot) => sum + lot.quantity, 0)
-  if (quantity > round2(total)) throw new Error('Cost-basis lots do not cover owner quantity')
+  const total = round2(ownerLots.reduce((sum, lot) => sum + lot.quantity, 0))
+  if (quantity > total) throw new Error('Cost-basis lots do not cover owner quantity')
+  const targetRemaining = round2(total - quantity)
+  if (targetRemaining <= 0) return lots.filter((lot) => lot.ownerId !== ownerId)
+
+  const ownerCount = ownerLots.length
+  let ownerSeen = 0
+  let assigned = 0
   return lots.map((lot) => {
-    if (lot.ownerId !== ownerId || remaining <= 0) return lot
-    const used = Math.min(lot.quantity, remaining)
-    remaining = round2(remaining - used)
-    return { ...lot, quantity: round2(lot.quantity - used) }
+    if (lot.ownerId !== ownerId) return lot
+    ownerSeen += 1
+    const nextQuantity = ownerSeen === ownerCount
+      ? round2(targetRemaining - assigned)
+      : round2((lot.quantity / total) * targetRemaining)
+    assigned = round2(assigned + nextQuantity)
+    return { ...lot, quantity: nextQuantity }
   }).filter((lot) => lot.quantity > 0)
 }
 
@@ -135,7 +143,7 @@ export function applyConversion(state: FinanceState, input: ConversionInput, now
     ...source,
     quantity: round2(source.quantity - input.sourceQuantity),
     ownership: source.ownership.map((share) => share.ownerId === input.ownerId ? { ...share, quantity: round2(share.quantity - input.sourceQuantity) } : share),
-    costLots: reduceOwnerCostLots(source.costLots, input.ownerId, input.sourceQuantity),
+    costLots: reduceOwnerCostLotsWeightedAverage(source.costLots, input.ownerId, input.sourceQuantity),
   }
 
   const targetId = `holding-${crypto.randomUUID()}`
@@ -203,6 +211,10 @@ export function updateValuation(state: FinanceState, holdingId: string, unitPric
 
 export function assertPhysicalQuantityInvariant(holding: Holding): boolean {
   return round2(holding.ownership.reduce((sum, share) => sum + share.quantity, 0)) === round2(holding.quantity)
+}
+
+export function assertCostBasisCoverageInvariant(holding: Holding): boolean {
+  return holding.ownership.every((share) => round2(holding.costLots.filter((lot) => lot.ownerId === share.ownerId).reduce((sum, lot) => sum + lot.quantity, 0)) === round2(share.quantity))
 }
 
 export function assertPortfolioAllocationInvariant(state: FinanceState): boolean {
