@@ -1,6 +1,7 @@
 import { ArrowDownLeft, ArrowLeftRight, ArrowUpRight, LockKeyhole, RefreshCcw, Repeat2, SlidersHorizontal } from 'lucide-react'
 import type { ReactNode } from 'react'
 import { useFinance } from '../application/store'
+import '../ledger-mobile.css'
 
 const money = new Intl.NumberFormat('ar-SA', { maximumFractionDigits: 2 })
 
