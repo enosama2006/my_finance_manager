@@ -33,6 +33,14 @@ export interface OwnershipShare {
   quantity: number
 }
 
+export interface CostBasisLot {
+  id: string
+  ownerId: string
+  quantity: number
+  unitCostSar?: number
+  acquiredAt?: string
+}
+
 export interface Holding {
   id: string
   symbol: string
@@ -41,7 +49,7 @@ export interface Holding {
   nativeUnit: string
   quantity: number
   marketPriceSar: number
-  averageCostSar?: number
+  costLots: CostBasisLot[]
   valuationMethod: ValuationMethod
   valuationSource?: string
   valuedAt?: string
@@ -144,6 +152,7 @@ export interface Claim {
 
 export interface FinanceState {
   schemaVersion: 4
+  costBasisMethod: 'weighted_average'
   parties: Party[]
   accounts: Account[]
   holdings: Holding[]
