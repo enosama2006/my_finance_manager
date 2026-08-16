@@ -30,6 +30,7 @@ React لا يملك قواعد مالية. التخزين الحالي LocalStor
 - `Account`: النسخة الرقمية من الحساب أو مكان الحفظ الحقيقي، مع Stable ID وحالة وأرصدة مطابقة.
 - `Holding`: أصل + كمية أصلية داخل Account/Custodian.
 - `OwnershipShare`: حصص الملكية الاقتصادية داخل Holding.
+- `CostBasisLot`: كمية وتكلفة اقتناء مرتبطة بمالك محدد داخل Holding؛ السياسة الحالية `weighted_average` لكل مالك على حدة.
 - `Portfolio`: المحفظة والمخصص كيان واحد شجري.
 - `PortfolioSlice`: كمية أصلية من Holding منسوبة إلى Owner + Leaf Portfolio.
 - `LedgerTransaction`: Logical Transaction واحدة مع version/revisions كأساس لتصحيح الإدخال دون صف مالي ثانٍ.
@@ -45,6 +46,8 @@ React لا يملك قواعد مالية. التخزين الحالي LocalStor
 
 - Available يُحسب من Portfolio Slices غير المخصصة لكل Holding/Owner، وليس Net Worth ناقص أهداف المحافظ.
 - مجموع Ownership Shares = Physical Native Quantity للـHolding.
+- مجموع CostBasisLots لكل Owner/Holding يغطي كمية ملكيته؛ التكلفة قد تكون مجهولة لكن الكمية لا تضيع.
+- Weighted-average disposal يخفض Lots الخاصة بالمالك تناسبيًا كي لا يتحول النظام ضمنيًا إلى FIFO.
 - مجموع Portfolio Slices لكل Owner/Holding لا يتجاوز ملكيته.
 - Portfolio parent يجمع الأبناء دون مضاعفة؛ الحصص الفعلية توضع في الأوراق.
 - Custody لا تنقل Ownership، وClaim يختلف عن أصل محفوظ لدى الغير.
