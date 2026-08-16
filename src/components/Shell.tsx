@@ -1,46 +1,47 @@
-import { Banknote, Boxes, ChartNoAxesCombined, CircleDollarSign, Gauge, Menu, ReceiptText, RotateCcw, WalletCards, X } from 'lucide-react'
-import { useState, type ReactNode } from 'react'
+import { ChartNoAxesCombined, CircleDollarSign, Gauge, ReceiptText, RotateCcw, WalletCards, Boxes } from 'lucide-react'
+import type { ReactNode } from 'react'
 
 export type PageKey = 'dashboard' | 'assets' | 'allocations' | 'ledger' | 'trade'
 
-const items: { id: PageKey; label: string; icon: typeof Gauge }[] = [
-  { id: 'dashboard', label: 'نظرة عامة', icon: Gauge },
-  { id: 'assets', label: 'الأصول والحسابات', icon: WalletCards },
-  { id: 'allocations', label: 'المخصصات', icon: Boxes },
-  { id: 'ledger', label: 'السجل المالي', icon: ReceiptText },
-  { id: 'trade', label: 'تحويل الأصول', icon: ChartNoAxesCombined },
+const items: { id: PageKey; label: string; short: string; icon: typeof Gauge }[] = [
+  { id: 'dashboard', label: 'نظرة عامة', short: 'الرئيسية', icon: Gauge },
+  { id: 'assets', label: 'الأصول والحسابات', short: 'الأصول', icon: WalletCards },
+  { id: 'allocations', label: 'المخصصات', short: 'المخصصات', icon: Boxes },
+  { id: 'ledger', label: 'السجل المالي', short: 'السجل', icon: ReceiptText },
+  { id: 'trade', label: 'تحويل الأصول', short: 'تحويل', icon: ChartNoAxesCombined },
 ]
 
 export function Shell({ page, onPage, onReset, children }: { page: PageKey; onPage: (p: PageKey) => void; onReset: () => void; children: ReactNode }) {
-  const [open, setOpen] = useState(false)
+  const current = items.find((x) => x.id === page)
   return (
-    <div className="app-shell">
-      <aside className={`sidebar ${open ? 'open' : ''}`}>
-        <div className="brand-row">
-          <div className="brand-mark"><CircleDollarSign size={24} /></div>
-          <div><strong>MyFinMan</strong><span>مديرك المالي الشخصي</span></div>
-          <button className="icon-button mobile-only" onClick={() => setOpen(false)} aria-label="إغلاق"><X size={20} /></button>
-        </div>
-        <nav>
-          {items.map(({ id, label, icon: Icon }) => (
-            <button key={id} className={page === id ? 'nav-item active' : 'nav-item'} onClick={() => { onPage(id); setOpen(false) }}>
-              <Icon size={19} /><span>{label}</span>
+    <div className="app-stage">
+      <div className="app-shell">
+        <header className="mobile-header">
+          <div className="brand-lockup">
+            <div className="brand-mark"><CircleDollarSign size={22} /></div>
+            <div>
+              <span className="eyebrow">MYFINMAN</span>
+              <strong>{current?.label}</strong>
+            </div>
+          </div>
+          <button className="icon-button" onClick={onReset} aria-label="إعادة البيانات التجريبية" title="إعادة البيانات التجريبية">
+            <RotateCcw size={18} />
+          </button>
+        </header>
+
+        <main className="main-area">
+          <div className="content">{children}</div>
+        </main>
+
+        <nav className="bottom-nav" aria-label="التنقل الرئيسي">
+          {items.map(({ id, short, icon: Icon }) => (
+            <button key={id} className={page === id ? 'bottom-nav-item active' : 'bottom-nav-item'} onClick={() => onPage(id)}>
+              <span className="bottom-nav-icon"><Icon size={20} strokeWidth={page === id ? 2.5 : 2} /></span>
+              <span>{short}</span>
             </button>
           ))}
         </nav>
-        <div className="sidebar-foot">
-          <div className="privacy-note"><Banknote size={17} /><div><strong>بيانات تجريبية محلية</strong><span>تحفظ في متصفحك فقط.</span></div></div>
-          <button className="ghost wide" onClick={onReset}><RotateCcw size={16} /> إعادة البيانات التجريبية</button>
-        </div>
-      </aside>
-      <main className="main-area">
-        <header className="topbar">
-          <button className="icon-button mobile-only" onClick={() => setOpen(true)} aria-label="القائمة"><Menu size={20} /></button>
-          <div><span className="eyebrow">MYFINMAN / CYCLE 1</span><h1>{items.find((x) => x.id === page)?.label}</h1></div>
-          <div className="live-pill"><span /> دفتر محلي نشط</div>
-        </header>
-        <div className="content">{children}</div>
-      </main>
+      </div>
     </div>
   )
 }
