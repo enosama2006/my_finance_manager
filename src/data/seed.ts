@@ -2,67 +2,57 @@ import type { FinanceState } from '../domain/types'
 
 export const SELF_ID = 'party-self'
 
+const tx = (id: string, at: string, kind: FinanceState['ledger'][number]['kind'], title: string, amountSar: number, ownerId = SELF_ID): FinanceState['ledger'][number] => ({ id, version: 1, status: 'posted', revisions: [], at, kind, title, amountSar, ownerId })
+
 export const seedState: FinanceState = {
+  schemaVersion: 4,
   parties: [
     { id: SELF_ID, name: 'أنا', type: 'self' },
     { id: 'party-owner-2', name: 'مالك 2', type: 'person' },
     { id: 'party-ahmad', name: 'أحمد', type: 'person' },
     { id: 'party-alinma', name: 'مصرف الإنماء', type: 'bank' },
     { id: 'party-alrajhi', name: 'مصرف الراجحي', type: 'bank' },
-    { id: 'party-broker', name: 'منصة الاستثمار', type: 'broker' }
+    { id: 'party-broker', name: 'منصة الاستثمار', type: 'broker' },
+  ],
+  accounts: [
+    { id: 'acc-alinma', name: 'جاري الإنماء', kind: 'checking', custodianId: 'party-alinma', institutionId: 'party-alinma', currency: 'SAR', last4: '2201', status: 'active', openingBalanceSar: 1000000, openingAt: '2026-08-01', observedBalanceSar: 1000000, observedAt: '2026-08-16' },
+    { id: 'acc-alrajhi', name: 'جاري الراجحي', kind: 'checking', custodianId: 'party-alrajhi', institutionId: 'party-alrajhi', currency: 'SAR', last4: '7732', status: 'active', openingBalanceSar: 80000, openingAt: '2026-08-01', observedBalanceSar: 80000, observedAt: '2026-08-16' },
+    { id: 'acc-vault', name: 'الخزنة', kind: 'cash', custodianId: SELF_ID, status: 'active' },
+    { id: 'acc-ahmad-custody', name: 'حفظ لدى أحمد', kind: 'custody', custodianId: 'party-ahmad', status: 'active' },
+    { id: 'acc-broker', name: 'حساب الاستثمار', kind: 'investment', custodianId: 'party-broker', institutionId: 'party-broker', status: 'active' },
   ],
   holdings: [
-    {
-      id: 'h-alinma-sar', symbol: 'SAR', name: 'سيولة الإنماء', kind: 'currency', nativeUnit: 'ر.س',
-      quantity: 1000000, marketPriceSar: 1, averageCostSar: 1, container: 'حساب الإنماء',
-      custodianId: 'party-alinma', location: 'مصرف الإنماء', ownership: [{ ownerId: SELF_ID, quantity: 1000000 }]
-    },
-    {
-      id: 'h-alrajhi-sar', symbol: 'SAR', name: 'سيولة الراجحي', kind: 'currency', nativeUnit: 'ر.س',
-      quantity: 80000, marketPriceSar: 1, averageCostSar: 1, container: 'حساب الراجحي',
-      custodianId: 'party-alrajhi', location: 'مصرف الراجحي', ownership: [{ ownerId: SELF_ID, quantity: 80000 }]
-    },
-    {
-      id: 'h-usd', symbol: 'USD', name: 'دولار أمريكي', kind: 'currency', nativeUnit: 'USD',
-      quantity: 12000, marketPriceSar: 3.75, averageCostSar: 3.74, container: 'محفظة العملات',
-      custodianId: SELF_ID, location: 'الخزنة', ownership: [{ ownerId: SELF_ID, quantity: 12000 }]
-    },
-    {
-      id: 'h-silver-ahmad', symbol: 'XAG', name: 'فضة محفوظة لدى أحمد', kind: 'metal', nativeUnit: 'غرام',
-      quantity: 500, marketPriceSar: 8.1, averageCostSar: 7.55, container: 'معادن شخصية',
-      custodianId: 'party-ahmad', location: 'لدى أحمد', ownership: [{ ownerId: SELF_ID, quantity: 500 }]
-    },
-    {
-      id: 'h-gold', symbol: 'XAU', name: 'ذهب', kind: 'metal', nativeUnit: 'غرام',
-      quantity: 25, marketPriceSar: 545, averageCostSar: 530, container: 'معادن شخصية',
-      custodianId: SELF_ID, location: 'الخزنة', ownership: [{ ownerId: SELF_ID, quantity: 25 }]
-    },
-    {
-      id: 'h-shared-silver', symbol: 'XAG', name: 'فضة مشتركة', kind: 'metal', nativeUnit: 'غرام',
-      quantity: 1000, marketPriceSar: 8.1, averageCostSar: 7.7, container: 'حيازة مشتركة',
-      custodianId: 'party-broker', location: 'مستودع الحفظ', ownership: [
-        { ownerId: SELF_ID, quantity: 700 },
-        { ownerId: 'party-owner-2', quantity: 300 }
-      ]
-    },
-    {
-      id: 'h-global-fund', symbol: 'GLB', name: 'صندوق أسهم عالمي', kind: 'fund', nativeUnit: 'وحدة',
-      quantity: 1000, marketPriceSar: 103, averageCostSar: 100, container: 'محفظة الاستثمار',
-      custodianId: 'party-broker', location: 'منصة الاستثمار', ownership: [{ ownerId: SELF_ID, quantity: 1000 }]
-    }
+    { id: 'h-alinma-sar', symbol: 'SAR', name: 'ريال سعودي', kind: 'currency', nativeUnit: 'ر.س', quantity: 1000000, marketPriceSar: 1, averageCostSar: 1, valuationMethod: 'nominal', accountId: 'acc-alinma', custodianId: 'party-alinma', ownership: [{ ownerId: SELF_ID, quantity: 1000000 }] },
+    { id: 'h-alrajhi-sar', symbol: 'SAR', name: 'ريال سعودي', kind: 'currency', nativeUnit: 'ر.س', quantity: 80000, marketPriceSar: 1, averageCostSar: 1, valuationMethod: 'nominal', accountId: 'acc-alrajhi', custodianId: 'party-alrajhi', ownership: [{ ownerId: SELF_ID, quantity: 80000 }] },
+    { id: 'h-usd', symbol: 'USD', name: 'دولار أمريكي', kind: 'currency', nativeUnit: 'USD', quantity: 12000, marketPriceSar: 3.75, averageCostSar: 3.74, valuationMethod: 'fx', valuationSource: 'manual seed', valuedAt: '2026-08-16', accountId: 'acc-vault', custodianId: SELF_ID, location: 'الخزنة', ownership: [{ ownerId: SELF_ID, quantity: 12000 }] },
+    { id: 'h-silver-ahmad', symbol: 'XAG', name: 'فضة', kind: 'metal', nativeUnit: 'غرام', quantity: 500, marketPriceSar: 8.1, averageCostSar: 7.55, valuationMethod: 'market_quote', valuationSource: 'manual seed', valuedAt: '2026-08-16', accountId: 'acc-ahmad-custody', custodianId: 'party-ahmad', location: 'لدى أحمد', ownership: [{ ownerId: SELF_ID, quantity: 500 }] },
+    { id: 'h-gold', symbol: 'XAU', name: 'ذهب', kind: 'metal', nativeUnit: 'غرام', quantity: 25, marketPriceSar: 545, averageCostSar: 530, valuationMethod: 'market_quote', valuationSource: 'manual seed', valuedAt: '2026-08-16', accountId: 'acc-vault', custodianId: SELF_ID, location: 'الخزنة', ownership: [{ ownerId: SELF_ID, quantity: 25 }] },
+    { id: 'h-shared-silver', symbol: 'XAG', name: 'فضة مشتركة', kind: 'metal', nativeUnit: 'غرام', quantity: 1000, marketPriceSar: 8.1, averageCostSar: 7.7, valuationMethod: 'market_quote', valuationSource: 'manual seed', valuedAt: '2026-08-16', accountId: 'acc-broker', custodianId: 'party-broker', location: 'مستودع الحفظ', ownership: [{ ownerId: SELF_ID, quantity: 700 }, { ownerId: 'party-owner-2', quantity: 300 }] },
+    { id: 'h-global-fund', symbol: 'GLB', name: 'صندوق أسهم عالمي', kind: 'fund', nativeUnit: 'وحدة', quantity: 1000, marketPriceSar: 103, averageCostSar: 100, valuationMethod: 'market_quote', valuationSource: 'manual seed', valuedAt: '2026-08-16', accountId: 'acc-broker', custodianId: 'party-broker', ownership: [{ ownerId: SELF_ID, quantity: 1000 }] },
   ],
-  allocations: [
-    { id: 'a-emergency', name: 'الطوارئ', amountSar: 120000, fundedSar: 100000, ownerId: SELF_ID, sourceHoldingIds: ['h-alinma-sar'], group: 'emergency' },
-    { id: 'a-monthly', name: 'المصاريف الشهرية', amountSar: 240000, fundedSar: 200000, ownerId: SELF_ID, sourceHoldingIds: ['h-alinma-sar', 'h-alrajhi-sar'], group: 'monthly' },
-    { id: 'a-invest', name: 'الاستثمار طويل الأجل', amountSar: 350000, fundedSar: 250000, ownerId: SELF_ID, sourceHoldingIds: ['h-global-fund', 'h-gold'], group: 'investment' },
-    { id: 'a-saving', name: 'ادخار مرن', amountSar: 180000, fundedSar: 120000, ownerId: SELF_ID, sourceHoldingIds: ['h-alinma-sar'], group: 'saving' }
+  portfolios: [
+    { id: 'p-root', name: 'أموالي', ownerIds: [SELF_ID], purpose: 'الجذر التجميعي', status: 'active' },
+    { id: 'p-commitments', name: 'التزاماتي', parentId: 'p-root', ownerIds: [SELF_ID], purpose: 'الالتزامات والاحتياجات', status: 'active' },
+    { id: 'p-monthly', name: 'المصاريف الشهرية', parentId: 'p-commitments', ownerIds: [SELF_ID], targetValueSar: 240000, status: 'active' },
+    { id: 'p-emergency', name: 'الطوارئ', parentId: 'p-commitments', ownerIds: [SELF_ID], targetValueSar: 120000, status: 'active' },
+    { id: 'p-savings', name: 'الادخار', parentId: 'p-root', ownerIds: [SELF_ID], status: 'active' },
+    { id: 'p-flex', name: 'ادخار مرن', parentId: 'p-savings', ownerIds: [SELF_ID], targetValueSar: 180000, status: 'active' },
+    { id: 'p-invest', name: 'الاستثمار طويل الأجل', parentId: 'p-savings', ownerIds: [SELF_ID], targetValueSar: 350000, status: 'active' },
+  ],
+  portfolioSlices: [
+    { id: 's-emergency', portfolioId: 'p-emergency', holdingId: 'h-alinma-sar', ownerId: SELF_ID, quantity: 100000 },
+    { id: 's-monthly-a', portfolioId: 'p-monthly', holdingId: 'h-alinma-sar', ownerId: SELF_ID, quantity: 150000 },
+    { id: 's-monthly-r', portfolioId: 'p-monthly', holdingId: 'h-alrajhi-sar', ownerId: SELF_ID, quantity: 50000 },
+    { id: 's-flex', portfolioId: 'p-flex', holdingId: 'h-alinma-sar', ownerId: SELF_ID, quantity: 120000 },
+    { id: 's-invest-fund', portfolioId: 'p-invest', holdingId: 'h-global-fund', ownerId: SELF_ID, quantity: 1000 },
+    { id: 's-invest-gold', portfolioId: 'p-invest', holdingId: 'h-gold', ownerId: SELF_ID, quantity: 25 },
   ],
   ledger: [
-    { id: 'tx-1', at: '2026-08-01T08:00:00.000Z', kind: 'income', title: 'دخل شهري', amountSar: 35000, ownerId: SELF_ID, targetHoldingId: 'h-alrajhi-sar' },
-    { id: 'tx-2', at: '2026-08-05T13:10:00.000Z', kind: 'expense', title: 'مصروف منزلي', amountSar: 3200, ownerId: SELF_ID, sourceHoldingId: 'h-alrajhi-sar' },
-    { id: 'tx-3', at: '2026-08-07T09:20:00.000Z', kind: 'reallocation', title: 'إعادة تخصيص للطوارئ', amountSar: 10000, ownerId: SELF_ID, note: 'لا توجد حركة نقدية حقيقية ولا ربح/خسارة.' }
+    { ...tx('tx-1', '2026-08-01T08:00:00.000Z', 'income', 'دخل شهري', 35000), targetHoldingId: 'h-alrajhi-sar' },
+    { ...tx('tx-2', '2026-08-05T13:10:00.000Z', 'expense', 'مصروف منزلي', 3200), sourceHoldingId: 'h-alrajhi-sar' },
+    { ...tx('tx-3', '2026-08-07T09:20:00.000Z', 'allocation_settlement', 'تسوية تغطية للطوارئ', 10000), note: 'تغير الخريطة الاقتصادية فقط، بلا حركة مصرفية.' },
   ],
-  incomeStreams: [
-    { id: 'i-salary', name: 'الدخل الشهري', amountSar: 35000, dueDay: 27, targetHoldingId: 'h-alrajhi-sar', status: 'expected' }
-  ]
+  incomeStreams: [{ id: 'i-salary', name: 'الراتب الشهري', amountSar: 35000, dueDay: 27, targetHoldingId: 'h-alrajhi-sar', ownerId: SELF_ID, status: 'expected' }],
+  liabilities: [{ id: 'l-card', name: 'بطاقة ائتمان تجريبية', ownerId: SELF_ID, accountId: 'acc-alrajhi', amountSar: 4200, kind: 'credit_card', status: 'open' }],
+  claims: [],
 }
