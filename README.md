@@ -1,40 +1,40 @@
-# MyFinMan — Personal Finance Manager
+# MyFinMan — Personal Finance Operating System
 
-نسخة Cycle 1 تفاعلية RTL مبنية بـ React + TypeScript + Vite، ومصممة كأول Presentation Client فوق قواعد Domain مستقلة.
+MyFinMan هو مدير مالي شخصي عربي RTL مبني Mobile-first. المستودع يعمل حاليًا كـ **Foundation V4**: حقيقة مالية واحدة مع خرائط مستقلة للمالك، المحفظة، الأصل، الحساب/الحافظ، الكمية، التكلفة والتقييم.
 
-## تشغيل سريع على Windows
+## التشغيل على Windows
 
-1. ثبّت Node.js LTS.
-2. نزّل/استنسخ المستودع.
-3. شغّل `run.bat` بالنقر المزدوج.
-4. يفتح التطبيق على `http://localhost:5173`.
-
-أو يدويًا:
-
-```bash
-npm install
-npm run dev
+```bat
+git pull origin main
+run.bat
 ```
 
-## الاختبارات والبناء
+`run.bat` يثبت الحزم في أول تشغيل ثم يفتح Vite على `http://localhost:5173`.
 
-```bash
-npm test
-npm run build
+## المعمارية
+
+```text
+Presentation → Application → Domain → Repository → LocalStorage/API later
 ```
 
-## ما الذي يوضحه هذا الـCycle؟
+ابدأ من:
 
-- Dashboard لصافي الثروة والمتاح والمخصص والربح المحقق.
-- عرض الأصول بعدة Lenses: حسب المالك، الحائز، ونوع الأصل.
-- فصل Ownership عن Custody وLocation وAllocation.
-- سيناريو أصل مملوك لك ومحفوظ لدى طرف آخر.
-- ملكية مشتركة عبر Ownership Shares.
-- مخصصات منطقية لا تحرك الأموال الحقيقية.
-- Immutable Ledger.
-- Asset Conversion مع كمية خروج/دخول، سعر تنفيذ، رسوم، Cost Basis وRealized P/L.
-- حفظ محلي في `localStorage` للنسخة التجريبية.
+- `docs/architecture-v4.md`
+- `docs/domain-rules.md`
+- `docs/implementation-status.md`
 
-> هذه النسخة لا تتصل بحسابات مصرفية حقيقية ولا ترسل بيانات إلى خادم خارجي.
+## ما تمثله النسخة الحالية
 
-راجع `docs/domain-rules.md` للقواعد التي لا يجوز للواجهة كسرها.
+- Mobile app shell وRTL.
+- Real Accounts كأساس لمطابقة الواقع.
+- Owner منفصل عن Custodian وLocation.
+- Unified Portfolio Tree بدل فصل «المخصصات» عن «المحافظ».
+- Portfolio Slices بكميات Native داخل Holdings.
+- Available من الحصص غير المخصصة فعليًا.
+- أصول لدى الغير وملكية مشتركة بلا double counting.
+- Valuation منفصل عن cash flow.
+- Asset Conversion مع Cost Basis وRealized P/L فقط عند conversion/disposal.
+- Repository abstraction بدل ربط React مباشرة بـ LocalStorage.
+- نمذجة Transaction revisions وLiabilities/Claims كأساس للمراحل التالية.
+
+> لا تعتبر Foundation V4 اكتمال Cycle 1. حالة كل use case والاختبارات المتبقية موثقة في `docs/implementation-status.md`.

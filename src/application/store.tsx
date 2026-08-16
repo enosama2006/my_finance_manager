@@ -1,26 +1,20 @@
 import { createContext, useContext, useMemo, useState, type ReactNode } from 'react'
-import { applyConversion, applyPureReallocation } from '../domain/finance'
+import { applyConversion } from '../domain/finance'
 import type { ConversionInput, FinanceState } from '../domain/types'
 import { seedState } from '../data/seed'
-
-const STORAGE_KEY = 'myfinman-cycle1-v1'
+import { createLocalStorageFinanceRepository } from '../data/localStorageRepository'
 
 interface FinanceContextValue {
   state: FinanceState
   convert: (input: ConversionInput) => void
-  reallocate: (allocationId: string, fundedSar: number) => void
   reset: () => void
 }
 
 const FinanceContext = createContext<FinanceContextValue | null>(null)
+const repository = createLocalStorageFinanceRepository()
 
 function loadInitial(): FinanceState {
-  try {
-    const saved = localStorage.getItem(STORAGE_KEY)
-    return saved ? JSON.parse(saved) as FinanceState : seedState
-  } catch {
-    return seedState
-  }
+  return repository.load() ?? seedState
 }
 
 export function FinanceProvider({ children }: { children: ReactNode }) {
@@ -28,14 +22,16 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
 
   const persist = (next: FinanceState) => {
     setState(next)
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(next))
+    repository.save(next)
   }
 
   const value = useMemo<FinanceContextValue>(() => ({
     state,
     convert: (input) => persist(applyConversion(state, input)),
-    reallocate: (allocationId, fundedSar) => persist(applyPureReallocation(state, allocationId, fundedSar)),
-    reset: () => persist(seedState),
+    reset: () => {
+      repository.clear()
+      persist(seedState)
+    },
   }), [state])
 
   return <FinanceContext.Provider value={value}>{children}</FinanceContext.Provider>

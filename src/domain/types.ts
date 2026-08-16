@@ -1,6 +1,11 @@
-export type AssetKind = 'cash' | 'currency' | 'metal' | 'fund' | 'stock' | 'real_estate' | 'other'
-export type TransactionKind = 'income' | 'expense' | 'real_transfer' | 'reallocation' | 'conversion' | 'reconciliation'
+export type AssetKind = 'cash' | 'currency' | 'metal' | 'collectible' | 'fund' | 'stock' | 'crypto' | 'real_estate' | 'fixed_term' | 'receivable' | 'other'
+export type AccountKind = 'checking' | 'saving' | 'investment' | 'cash' | 'prepaid' | 'custody' | 'fixed_term' | 'credit_card'
+export type AccountStatus = 'active' | 'closed' | 'archived'
+export type PortfolioStatus = 'active' | 'closed' | 'archived'
+export type TransactionStatus = 'draft' | 'posted'
+export type TransactionKind = 'opening' | 'income' | 'expense' | 'real_transfer' | 'asset_purchase' | 'asset_sale' | 'conversion' | 'allocation_settlement' | 'ownership_event' | 'liability_creation' | 'liability_payment' | 'reconciliation' | 'refund'
 export type IncomeStatus = 'expected' | 'received' | 'late' | 'missed'
+export type ValuationMethod = 'nominal' | 'fx' | 'market_quote' | 'manual_appraisal' | 'contractual' | 'cost_fallback' | 'unvalued'
 
 export interface Party {
   id: string
@@ -8,9 +13,32 @@ export interface Party {
   type: 'person' | 'bank' | 'broker' | 'institution' | 'self'
 }
 
+export interface Account {
+  id: string
+  name: string
+  kind: AccountKind
+  custodianId: string
+  institutionId?: string
+  currency?: string
+  last4?: string
+  status: AccountStatus
+  openingBalanceSar?: number
+  openingAt?: string
+  observedBalanceSar?: number
+  observedAt?: string
+}
+
 export interface OwnershipShare {
   ownerId: string
   quantity: number
+}
+
+export interface CostBasisLot {
+  id: string
+  ownerId: string
+  quantity: number
+  unitCostSar?: number
+  acquiredAt?: string
 }
 
 export interface Holding {
@@ -21,26 +49,61 @@ export interface Holding {
   nativeUnit: string
   quantity: number
   marketPriceSar: number
-  averageCostSar: number
-  container: string
+  costLots: CostBasisLot[]
+  valuationMethod: ValuationMethod
+  valuationSource?: string
+  valuedAt?: string
+  accountId: string
   custodianId: string
-  location: string
+  location?: string
   ownership: OwnershipShare[]
   archived?: boolean
 }
 
-export interface Allocation {
+export interface Portfolio {
   id: string
   name: string
-  amountSar: number
-  fundedSar: number
+  parentId?: string
+  ownerIds: string[]
+  beneficiaryId?: string
+  purpose?: string
+  targetValueSar?: number
+  status: PortfolioStatus
+}
+
+export interface PortfolioSlice {
+  id: string
+  portfolioId: string
+  holdingId: string
   ownerId: string
-  sourceHoldingIds: string[]
-  group: 'essential' | 'monthly' | 'emergency' | 'saving' | 'investment'
+  quantity: number
+}
+
+export interface TransactionRevision {
+  version: number
+  changedAt: string
+  reason: string
+  snapshot: {
+    at: string
+    title: string
+    amountSar: number
+    ownerId: string
+    sourceHoldingId?: string
+    targetHoldingId?: string
+    sourceQuantity?: number
+    targetQuantity?: number
+    exchangeRate?: number
+    feesSar?: number
+    realizedGainLossSar?: number | null
+    note?: string
+  }
 }
 
 export interface LedgerTransaction {
   id: string
+  version: number
+  status: TransactionStatus
+  revisions: TransactionRevision[]
   at: string
   kind: TransactionKind
   title: string
@@ -52,7 +115,7 @@ export interface LedgerTransaction {
   targetQuantity?: number
   exchangeRate?: number
   feesSar?: number
-  realizedGainLossSar?: number
+  realizedGainLossSar?: number | null
   note?: string
 }
 
@@ -62,19 +125,49 @@ export interface IncomeStream {
   amountSar: number
   dueDay: number
   targetHoldingId: string
+  ownerId: string
   status: IncomeStatus
 }
 
+export interface Liability {
+  id: string
+  name: string
+  ownerId: string
+  accountId?: string
+  amountSar: number
+  kind: 'credit_card' | 'loan' | 'other'
+  status: 'open' | 'closed'
+}
+
+export interface Claim {
+  id: string
+  creditorOwnerId: string
+  debtorPartyId: string
+  symbol: string
+  nativeUnit: string
+  quantity: number
+  unitValueSar: number
+  status: 'open' | 'settled'
+}
+
 export interface FinanceState {
+  schemaVersion: 4
+  costBasisMethod: 'weighted_average'
   parties: Party[]
+  accounts: Account[]
   holdings: Holding[]
-  allocations: Allocation[]
+  portfolios: Portfolio[]
+  portfolioSlices: PortfolioSlice[]
   ledger: LedgerTransaction[]
   incomeStreams: IncomeStream[]
+  liabilities: Liability[]
+  claims: Claim[]
 }
 
 export interface ConversionInput {
   sourceHoldingId: string
+  sourcePortfolioId?: string
+  targetPortfolioId?: string
   targetSymbol: string
   targetName: string
   targetKind: AssetKind
@@ -84,7 +177,7 @@ export interface ConversionInput {
   targetUnitValueSarAtExecution: number
   feesSar: number
   ownerId: string
-  targetContainer: string
+  targetAccountId: string
   targetCustodianId: string
-  targetLocation: string
+  targetLocation?: string
 }
