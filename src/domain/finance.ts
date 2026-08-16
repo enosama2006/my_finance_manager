@@ -1,4 +1,4 @@
-import type { ConversionInput, FinanceState, Holding, LedgerTransaction, Portfolio } from './types'
+import type { ConversionInput, CostBasisLot, FinanceState, Holding, LedgerTransaction, Portfolio } from './types'
 
 export const round2 = (value: number) => Math.round((value + Number.EPSILON) * 100) / 100
 
@@ -75,6 +75,27 @@ export function portfolioRollupValueSar(state: FinanceState, portfolioId: string
   return round2(ids.reduce((sum, id) => sum + portfolioDirectValueSar(state, id), 0))
 }
 
+export function ownerWeightedAverageCostSar(holding: Holding, ownerId: string): number | null {
+  const lots = holding.costLots.filter((lot) => lot.ownerId === ownerId && lot.quantity > 0)
+  if (!lots.length || lots.some((lot) => lot.unitCostSar == null)) return null
+  const quantity = lots.reduce((sum, lot) => sum + lot.quantity, 0)
+  if (quantity <= 0) return null
+  return round2(lots.reduce((sum, lot) => sum + lot.quantity * (lot.unitCostSar ?? 0), 0) / quantity)
+}
+
+function reduceOwnerCostLots(lots: CostBasisLot[], ownerId: string, quantity: number): CostBasisLot[] {
+  let remaining = quantity
+  const ownerLots = lots.filter((lot) => lot.ownerId === ownerId)
+  const total = ownerLots.reduce((sum, lot) => sum + lot.quantity, 0)
+  if (quantity > round2(total)) throw new Error('Cost-basis lots do not cover owner quantity')
+  return lots.map((lot) => {
+    if (lot.ownerId !== ownerId || remaining <= 0) return lot
+    const used = Math.min(lot.quantity, remaining)
+    remaining = round2(remaining - used)
+    return { ...lot, quantity: round2(lot.quantity - used) }
+  }).filter((lot) => lot.quantity > 0)
+}
+
 export interface ConversionPreview {
   sourceCostBasisSar: number | null
   proceedsSar: number
@@ -96,7 +117,8 @@ export function previewConversion(state: FinanceState, input: ConversionInput): 
   if (input.sourceQuantity <= 0 || input.targetQuantity <= 0) throw new Error('Quantities must be positive')
   if (input.sourceQuantity > sourceAvailableForConversion(state, input)) throw new Error('Not enough quantity in the selected owner/portfolio slice')
 
-  const sourceCostBasisSar = source.averageCostSar == null ? null : round2(input.sourceQuantity * source.averageCostSar)
+  const unitCost = ownerWeightedAverageCostSar(source, input.ownerId)
+  const sourceCostBasisSar = unitCost == null ? null : round2(input.sourceQuantity * unitCost)
   const proceedsSar = round2(input.targetQuantity * input.targetUnitValueSarAtExecution)
   const feesSar = round2(Math.max(0, input.feesSar))
   const realizedGainLossSar = sourceCostBasisSar == null ? null : round2(proceedsSar - feesSar - sourceCostBasisSar)
@@ -113,6 +135,7 @@ export function applyConversion(state: FinanceState, input: ConversionInput, now
     ...source,
     quantity: round2(source.quantity - input.sourceQuantity),
     ownership: source.ownership.map((share) => share.ownerId === input.ownerId ? { ...share, quantity: round2(share.quantity - input.sourceQuantity) } : share),
+    costLots: reduceOwnerCostLots(source.costLots, input.ownerId, input.sourceQuantity),
   }
 
   const targetId = `holding-${crypto.randomUUID()}`
@@ -124,7 +147,7 @@ export function applyConversion(state: FinanceState, input: ConversionInput, now
     nativeUnit: input.targetUnit,
     quantity: input.targetQuantity,
     marketPriceSar: input.targetUnitValueSarAtExecution,
-    averageCostSar: round2((preview.proceedsSar + preview.feesSar) / input.targetQuantity),
+    costLots: [{ id: `lot-${crypto.randomUUID()}`, ownerId: input.ownerId, quantity: input.targetQuantity, unitCostSar: round2((preview.proceedsSar + preview.feesSar) / input.targetQuantity), acquiredAt: now }],
     valuationMethod: input.targetSymbol === 'SAR' ? 'nominal' : 'market_quote',
     valuationSource: 'execution',
     valuedAt: now,
