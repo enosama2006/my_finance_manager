@@ -17,7 +17,7 @@ export type ExpenseCategoryStatus = 'active' | 'archived'
 export interface Party {
   id: string
   name: string
-  type: 'person' | 'bank' | 'broker' | 'institution' | 'self'
+  type: 'person' | 'bank' | 'broker' | 'institution' | 'home' | 'place' | 'self'
 }
 
 export interface Account {
@@ -53,6 +53,7 @@ export interface Holding {
   symbol: string
   name: string
   kind: AssetKind
+  assetTypeId?: string
   nativeUnit: string
   quantity: number
   marketPriceSar: number
