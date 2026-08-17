@@ -1,5 +1,5 @@
 import { createContext, useContext, useMemo, useState, type ReactNode } from 'react'
-import type { ConversionInput, FinanceState } from '../domain/types'
+import type { ConversionInput, ExpenseCategory, FinanceState } from '../domain/types'
 import type { MarketQuote } from '../data/marketData'
 import { parseSnapshot } from '../data/snapshot'
 import { seedState } from '../data/seed'
@@ -47,10 +47,28 @@ interface FinanceContextValue {
 const FinanceContext = createContext<FinanceContextValue | null>(null)
 const repository = createLocalStorageFinanceRepository()
 
+function materializeCategoryNecessity(categories: ExpenseCategory[]): ExpenseCategory[] {
+  const byId = new Map(categories.map(c => [c.id, c]))
+  const resolving = new Set<string>()
+  const resolved = new Map<string, ExpenseCategory>()
+  const resolve = (category: ExpenseCategory): ExpenseCategory => {
+    if (resolved.has(category.id)) return resolved.get(category.id)!
+    if (category.defaultNecessity || !category.parentId || resolving.has(category.id)) { resolved.set(category.id, category); return category }
+    resolving.add(category.id)
+    const parent = byId.get(category.parentId)
+    const parentResolved = parent ? resolve(parent) : undefined
+    resolving.delete(category.id)
+    const next = parentResolved?.defaultNecessity ? { ...category, defaultNecessity: parentResolved.defaultNecessity } : category
+    resolved.set(category.id, next)
+    return next
+  }
+  return categories.map(resolve)
+}
+
 function normalize(state: FinanceState): FinanceState {
   return {
     ...state,
-    expenseCategories: state.expenseCategories ?? [],
+    expenseCategories: materializeCategoryNecessity(state.expenseCategories ?? []),
     expenseBeneficiaries: state.expenseBeneficiaries ?? [],
     positions: state.positions ?? [],
     capitalCycles: state.capitalCycles ?? [],
