@@ -24,6 +24,8 @@ import {
 } from './expenses'
 import { reviseTransaction, type ReviseTransactionInput } from './transactionRevisions'
 import { setOpeningBalance, voidOpeningBalance } from './openingBalances'
+import { correctAssetPurchase, voidAssetPurchase, type CorrectAssetPurchaseInput } from './assetPurchaseCorrections'
+import { hydrateTransactionUserInputs } from './transactionInputMigration'
 
 interface FinanceContextValue {
   state: FinanceState
@@ -38,6 +40,8 @@ interface FinanceContextValue {
   voidOpeningBalance: (transactionId: string, reason: string) => void
   addExistingAsset: (input: ExistingAssetInput) => void
   purchaseAsset: (input: SimplifiedPurchaseInput) => void
+  correctAssetPurchase: (input: CorrectAssetPurchaseInput) => void
+  voidAssetPurchase: (transactionId: string, reason: string) => void
   transferFunds: (input: TransferFundsInput) => void
   createPortfolio: (input: CreatePortfolioInput) => void
   allocateToPortfolio: (input: AllocateToPortfolioInput) => void
@@ -98,7 +102,7 @@ function migrateLegacyPlacesToGroups(state: FinanceState): FinanceState {
 }
 
 function normalize(state: FinanceState): FinanceState {
-  const migrated = migrateLegacyPlacesToGroups(state)
+  const migrated = hydrateTransactionUserInputs(migrateLegacyPlacesToGroups(state))
   return {
     ...migrated,
     accountGroups: migrated.accountGroups ?? [],
@@ -128,6 +132,8 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     voidOpeningBalance: (transactionId, reason) => persist(voidOpeningBalance(state, transactionId, reason)),
     addExistingAsset: (input) => persist(addExistingAsset(state, input)),
     purchaseAsset: (input) => persist(purchaseAssetSimplified(state, input)),
+    correctAssetPurchase: (input) => persist(correctAssetPurchase(state, input)),
+    voidAssetPurchase: (transactionId, reason) => persist(voidAssetPurchase(state, transactionId, reason)),
     transferFunds: (input) => persist(transferFunds(state, input)),
     createPortfolio: (input) => persist(createPortfolio(state, input)),
     allocateToPortfolio: (input) => persist(allocateToPortfolio(state, input)),
