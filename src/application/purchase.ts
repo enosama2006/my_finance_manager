@@ -181,6 +181,23 @@ export function purchaseAssetSimplified(state: FinanceState, input: SimplifiedPu
     title: `شراء ${input.name.trim()}`, amountSar: preview.totalCostBasisSar, ownerId: input.ownerId,
     sourceHoldingId: source.id, targetHoldingId: holdingId, sourceQuantity: input.amountPaid, targetQuantity: input.quantity,
     feesSar: preview.extraCostsSar || undefined, positionId, portfolioId: input.portfolioId,
+    userInput: {
+      kind: 'asset_purchase',
+      sourceAccountId: source.accountId,
+      sourceHoldingId: source.id,
+      ownerId: input.ownerId,
+      amountPaid: input.amountPaid,
+      targetAccountId: account.id,
+      assetTypeId: def.id,
+      name: input.name.trim(),
+      symbol,
+      quantity: input.quantity,
+      extraCostsSar: preview.extraCostsSar || undefined,
+      portfolioId: input.portfolioId,
+      location: input.location?.trim() || undefined,
+      marketUnitPriceSar: marketPriceSar,
+      marketSource: input.marketQuote?.source ?? holding.valuationSource,
+    },
     note: input.marketQuote
       ? `التقييم السوقي جُلب من ${input.marketQuote.source}. الربح/الخسارة الحالية غير محققة.`
       : 'لم يتوفر Quote سوقي لحظة الشراء؛ بدأ التقييم مؤقتًا من تكلفة الاقتناء وسيُحدّث عند توفر مزود سعر.',
