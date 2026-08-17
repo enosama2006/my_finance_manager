@@ -4,6 +4,8 @@ import App from './App'
 import { FinanceProvider } from './application/store'
 import './styles.css'
 import './foundation-v4.css'
+import './responsive.css'
+import './operations.css'
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
