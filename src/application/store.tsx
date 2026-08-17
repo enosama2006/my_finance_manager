@@ -8,30 +8,15 @@ import { createLocalStorageFinanceRepository } from '../data/localStorageReposit
 import { runScenario, type ScenarioId } from './scenarios'
 import { applyManagedConversion } from './conversionPolicy'
 import {
-  addAccount,
-  addExistingAsset,
-  addFunds,
-  allocateToPortfolio,
-  createPortfolio,
-  transferFunds,
-  type AddAccountInput,
-  type AddFundsInput,
-  type AllocateToPortfolioInput,
-  type CreatePortfolioInput,
-  type ExistingAssetInput,
-  type TransferFundsInput,
+  addAccount, addExistingAsset, addFunds, allocateToPortfolio, createPortfolio, transferFunds,
+  type AddAccountInput, type AddFundsInput, type AllocateToPortfolioInput, type CreatePortfolioInput, type ExistingAssetInput, type TransferFundsInput,
 } from './commands'
 import { applyHoldingMarketQuote, purchaseAssetSimplified, type SimplifiedPurchaseInput } from './purchase'
 import {
-  archiveExpenseCategory,
-  createExpenseCategory,
-  createParty,
-  spendExpense,
-  updateExpenseCategory,
-  type CreateExpenseCategoryInput,
-  type CreatePartyInput,
-  type SpendExpenseInput,
-  type UpdateExpenseCategoryInput,
+  archiveExpenseBeneficiary, archiveExpenseCategory, createExpenseBeneficiary, createExpenseCategory, createParty, spendExpense,
+  updateExpenseBeneficiary, updateExpenseCategory,
+  type CreateExpenseBeneficiaryInput, type CreateExpenseCategoryInput, type CreatePartyInput, type SpendExpenseInput,
+  type UpdateExpenseBeneficiaryInput, type UpdateExpenseCategoryInput,
 } from './expenses'
 
 interface FinanceContextValue {
@@ -49,6 +34,9 @@ interface FinanceContextValue {
   createExpenseCategory: (input: CreateExpenseCategoryInput) => void
   updateExpenseCategory: (input: UpdateExpenseCategoryInput) => void
   archiveExpenseCategory: (categoryId: string) => void
+  createExpenseBeneficiary: (input: CreateExpenseBeneficiaryInput) => void
+  updateExpenseBeneficiary: (input: UpdateExpenseBeneficiaryInput) => void
+  archiveExpenseBeneficiary: (beneficiaryId: string) => void
   spendExpense: (input: SpendExpenseInput) => void
   importSnapshot: (raw: string) => void
   runScenario: (id: ScenarioId) => void
@@ -63,23 +51,17 @@ function normalize(state: FinanceState): FinanceState {
   return {
     ...state,
     expenseCategories: state.expenseCategories ?? [],
+    expenseBeneficiaries: state.expenseBeneficiaries ?? [],
     positions: state.positions ?? [],
     capitalCycles: state.capitalCycles ?? [],
   }
 }
 
-function loadInitial(): FinanceState {
-  return normalize(repository.load() ?? emptyState)
-}
+function loadInitial(): FinanceState { return normalize(repository.load() ?? emptyState) }
 
 export function FinanceProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<FinanceState>(loadInitial)
-
-  const persist = (next: FinanceState) => {
-    const normalized = normalize(next)
-    setState(normalized)
-    repository.save(normalized)
-  }
+  const persist = (next: FinanceState) => { const normalized = normalize(next); setState(normalized); repository.save(normalized) }
 
   const value = useMemo<FinanceContextValue>(() => ({
     state,
@@ -96,17 +78,14 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     createExpenseCategory: (input) => persist(createExpenseCategory(state, input)),
     updateExpenseCategory: (input) => persist(updateExpenseCategory(state, input)),
     archiveExpenseCategory: (categoryId) => persist(archiveExpenseCategory(state, categoryId)),
+    createExpenseBeneficiary: (input) => persist(createExpenseBeneficiary(state, input)),
+    updateExpenseBeneficiary: (input) => persist(updateExpenseBeneficiary(state, input)),
+    archiveExpenseBeneficiary: (beneficiaryId) => persist(archiveExpenseBeneficiary(state, beneficiaryId)),
     spendExpense: (input) => persist(spendExpense(state, input)),
     importSnapshot: (raw) => persist(parseSnapshot(raw)),
     runScenario: (id) => persist(runScenario(state, id)),
-    loadDemo: () => {
-      repository.clear()
-      persist(seedState)
-    },
-    reset: () => {
-      repository.clear()
-      persist(emptyState)
-    },
+    loadDemo: () => { repository.clear(); persist(seedState) },
+    reset: () => { repository.clear(); persist(emptyState) },
   }), [state])
 
   return <FinanceContext.Provider value={value}>{children}</FinanceContext.Provider>
