@@ -70,7 +70,8 @@ IDs are never recycled after publication.
 ### Domain / Data
 - `domain/domain-model.md` — entities, relationships and invariants independent of UI/storage.
 - `domain/income-producing-assets-draft.md` — Draft extension for EconomicActivity/Venture, account-specific Portfolio funding reservations and income-producing Asset semantics discovered in SCN-002.
-- `domain/portfolio-and-settlement-taxonomy-draft.md` — Draft decomposition of Free Liquidity, Portfolio behavior profiles, physical payment source, economic bearer and inter-owner settlement/reimbursement.
+- `domain/portfolio-and-settlement-taxonomy-draft.md` — Draft decomposition of Free Liquidity, Portfolio behavior profiles, physical payment source, economic bearer, settlement and lifecycle layers.
+- `domain/portfolio-lifecycle-and-capital-cycle-draft.md` — Draft separation of Portfolio lifecycle, finite CapitalCycle lifecycle and individual Position closure, including cycle-result snapshots and recurring Portfolio periods.
 - `domain/settlement-mandate-and-encumbrance-draft.md` — Draft model for entrusted value that may be transformed across Assets/Accounts before delivery, with explicit cost/gain attribution and obligation-backed encumbrance.
 - `domain/acquisition-chain-and-cost-flow-draft.md` — Draft model for propagating all-in economic acquisition cost through intermediate Asset conversions into a final Asset without losing cost basis or double-counting friction.
 - `domain/valuation-and-performance-policy-draft.md` — Draft position-scoped policy separating Cost Basis, current valuation and performance-recognition behavior for transactional cash, bridge assets and investment/store-of-value positions.
@@ -91,6 +92,7 @@ IDs are never recycled after publication.
 - `scenarios/SCN-006-entrusted-crypto-to-cash-settlement-cycle.md` — 1,000 USDT entrusted for delivery as USD cash; tests conversion mandate vs pure custody, sender-borne losses, operator execution spread, obligation-backed liquidity restriction and multi-step settlement across USDT/TRY/USD.
 - `scenarios/SCN-007-cost-flow-acquisition-chain.md` — SAR→USD→Land and payment→USDT→XRP examples; tests all-in effective acquisition cost, basis propagation, independent valuation, step-level versus end-to-end reporting and no-double-counting of conversion friction.
 - `scenarios/SCN-008-valuation-role-and-performance-recognition.md` — separates always-on cost tracking from position-specific valuation/performance recognition; covers transactional USD, bridge USD to Land, Gold/XRP investments and volatile-currency investment with explicit FX quote direction.
+- `scenarios/SCN-009-portfolio-lifecycle-and-capital-cycles.md` — separates long-lived Portfolio purpose from finite CapitalCycles and individual Position closure; covers short commercial cycles, child/savings Portfolios, Gold round trips, recurring commitments/spending, principal return and realized result.
 
 Scenarios are not merely examples. They are used to pressure-test the model. Each scenario should separate:
 - facts/requirements explicitly accepted by the user;
