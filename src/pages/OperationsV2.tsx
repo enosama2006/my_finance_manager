@@ -17,7 +17,7 @@ type ActionKey = 'purchase' | 'transfer' | 'funds' | 'existing' | 'portfolio' | 
 const actions: { id: ActionKey; title: string; sub: string; icon: typeof ShoppingCart }[] = [
   { id: 'purchase', title: 'شراء أصل', sub: 'حساب دفع ← أصل ← حساب حفظ', icon: ShoppingCart },
   { id: 'transfer', title: 'نقل أموال', sub: 'حساب إلى حساب بدون P/L', icon: ArrowLeftRight },
-  { id: 'funds', title: 'إضافة أموال', sub: 'رصيد افتتاحي أو دخل', icon: BanknoteArrowDown },
+  { id: 'funds', title: 'إضافة أموال', sub: 'رصيد افتتاحي واحد أو دخل متكرر', icon: BanknoteArrowDown },
   { id: 'existing', title: 'إضافة أصل قائم', sub: 'بدون دفع وهمي', icon: PackagePlus },
   { id: 'portfolio', title: 'إنشاء محفظة', sub: 'غرض وهدف وسلوك', icon: FolderPlus },
   { id: 'allocate', title: 'تخصيص لمحفظة', sub: 'تغيير الغرض فقط', icon: Boxes },
@@ -73,7 +73,7 @@ export function OperationsV2({ goTrade }: { goTrade: () => void }) {
   const [action, setAction] = useState<ActionKey>('purchase')
 
   const execute = (fn: () => void, success: string) => {
-    try { fn(); toast.success(success) } catch (error) { toast.error(err(error)) }
+    try { fn(); toast.success(success); return true } catch (error) { toast.error(err(error)); return false }
   }
 
   return <div className="page-stack operations-page">
@@ -90,7 +90,7 @@ export function OperationsV2({ goTrade }: { goTrade: () => void }) {
       <div className="operation-form-panel">
         {action === 'purchase' && <PurchaseForm state={state} accounts={accounts} portfolios={portfolios} onSubmit={(input: SimplifiedPurchaseInput) => execute(() => finance.purchaseAsset(input), `تم شراء «${input.name}» بنجاح وتحديث الرصيد والتكلفة.`)}/>} 
         {action === 'transfer' && <TransferForm state={state} accounts={accounts} onSubmit={(input: TransferFundsInput) => execute(() => finance.transferFunds(input), 'تم نقل الأموال بين الحسابات بدون تسجيل ربح أو خسارة.')}/>} 
-        {action === 'funds' && <FundsForm state={state} owners={owners} accounts={accounts} portfolios={portfolios} onSubmit={(input: AddFundsInput) => execute(() => finance.addFunds(input), 'تمت إضافة الرصيد بنجاح.')}/>} 
+        {action === 'funds' && <FundsForm key={`funds-${state.ledger.length}-${state.ledger.reduce((sum, tx) => sum + tx.version, 0)}`} state={state} owners={owners} accounts={accounts} portfolios={portfolios} onSubmit={(input: AddFundsInput) => execute(() => finance.addFunds(input), input.classification === 'opening' ? 'تم حفظ الرصيد الافتتاحي. هذا الرصيد يسجل مرة واحدة فقط وأي حفظ لاحق يعدّل نفس الرصيد.' : 'تمت إضافة الدخل بنجاح.')}/>} 
         {action === 'existing' && <ExistingAssetForm state={state} owners={owners} accounts={accounts} portfolios={portfolios} onSubmit={(input: ExistingAssetInput) => execute(() => finance.addExistingAsset(input), 'تم تسجيل الأصل القائم بنجاح دون خصم وهمي.')}/>} 
         {action === 'portfolio' && <PortfolioForm owners={owners} portfolios={portfolios} onSubmit={(input: CreatePortfolioInput) => execute(() => finance.createPortfolio(input), 'تم إنشاء المحفظة بنجاح.')}/>} 
         {action === 'allocate' && <AllocateForm state={state} owners={owners} holdings={holdings} portfolios={portfolios} onSubmit={(input: AllocateToPortfolioInput) => execute(() => finance.allocateToPortfolio(input), 'تم تخصيص الأصل للمحفظة بدون حركة نقدية.')}/>} 
@@ -209,7 +209,7 @@ function AccountForm({ state, onSubmit }: { state: FinanceState; onSubmit: (inpu
   </form></FormShell>
 }
 
-function FundsForm({ state, owners, accounts, portfolios, onSubmit }: { state: FinanceState; owners: Party[]; accounts: Account[]; portfolios: Portfolio[]; onSubmit: (input: AddFundsInput) => void }) {
+function FundsForm({ state, owners, accounts, portfolios, onSubmit }: { state: FinanceState; owners: Party[]; accounts: Account[]; portfolios: Portfolio[]; onSubmit: (input: AddFundsInput) => boolean }) {
   const eligible = accounts.filter(a => a.kind !== 'credit_card')
   const [ownerId, setOwner] = useState(owners.find(o => o.id === SELF_ID)?.id ?? owners[0]?.id ?? '')
   const [accountId, setAccount] = useState(eligible[0]?.id ?? '')
@@ -219,14 +219,19 @@ function FundsForm({ state, owners, accounts, portfolios, onSubmit }: { state: F
   const [market, setMarket] = useState('1')
   const [classification, setClass] = useState<'opening' | 'income'>('opening')
   const [portfolioId, setPortfolio] = useState('')
-  const submit = (e: FormEvent) => { e.preventDefault(); onSubmit({ accountId, ownerId, symbol, nativeUnit: symbol, quantity: num(quantity), unitCostSar: symbol === 'SAR' ? 1 : num(unitCost), marketPriceSar: symbol === 'SAR' ? 1 : num(market), classification, portfolioId: portfolioId || undefined }) }
+  const submit = (e: FormEvent) => {
+    e.preventDefault()
+    const ok = onSubmit({ accountId, ownerId, symbol, nativeUnit: symbol, quantity: num(quantity), unitCostSar: symbol === 'SAR' ? 1 : num(unitCost), marketPriceSar: symbol === 'SAR' ? 1 : num(market), classification, portfolioId: portfolioId || undefined })
+    if (ok) { setQuantity(''); setUnitCost('1'); setMarket('1'); setPortfolio('') }
+  }
   if (!eligible.length) return <EmptyAction title="أنشئ حسابًا أولًا" text="الرصيد يجب أن يوجد داخل حساب. المجموعة ليست شرطًا." />
-  return <FormShell title="إضافة رصيد" subtitle="اختر الحساب مباشرة. الرصيد الافتتاحي ليس دخلًا؛ الدخل الجديد يُسجل كتدفق."><form className="trade-form" onSubmit={submit}>
+  return <FormShell title="إضافة رصيد" subtitle="الرصيد الافتتاحي يسجل مرة واحدة فقط لكل حساب/مالك/عملة، ويمكن تصحيحه لاحقًا من الحركات. أما الدخل فهو تدفق متكرر."><form className="trade-form" onSubmit={submit}>
     <Field label="الحساب"><select value={accountId} onChange={e => setAccount(e.target.value)}>{eligible.map(a => <option key={a.id} value={a.id}>{accountLabel(state, a)}</option>)}</select></Field>
     <div className="field-grid three"><Field label="المالك"><select value={ownerId} onChange={e => setOwner(e.target.value)}>{owners.map(o => <option key={o.id} value={o.id}>{o.name}</option>)}</select></Field><Field label="العملة"><input value={symbol} onChange={e => setSymbol(e.target.value.toUpperCase())} /></Field><Field label="المبلغ"><input value={quantity} onChange={e => setQuantity(e.target.value)} inputMode="decimal" /></Field></div>
     {symbol !== 'SAR' && <div className="field-grid"><Field label="تكلفة الوحدة بالريال"><input value={unitCost} onChange={e => setUnitCost(e.target.value)} inputMode="decimal" /></Field><Field label="القيمة الحالية للوحدة"><input value={market} onChange={e => setMarket(e.target.value)} inputMode="decimal" /></Field></div>}
-    <div className="field-grid"><Field label="التصنيف"><select value={classification} onChange={e => setClass(e.target.value as 'opening' | 'income')}><option value="opening">رصيد قائم / افتتاحي</option><option value="income">دخل جديد</option></select></Field><Field label="المحفظة (اختياري)"><select value={portfolioId} onChange={e => setPortfolio(e.target.value)}><option value="">بدون تخصيص</option>{portfolios.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}</select></Field></div>
-    <button className="primary wide" type="submit">إضافة الرصيد</button>
+    <div className="field-grid"><Field label="التصنيف"><select value={classification} onChange={e => setClass(e.target.value as 'opening' | 'income')}><option value="opening">رصيد قائم / افتتاحي — مرة واحدة</option><option value="income">دخل جديد — قابل للتكرار</option></select></Field><Field label="المحفظة (اختياري)"><select value={portfolioId} onChange={e => setPortfolio(e.target.value)}><option value="">بدون تخصيص</option>{portfolios.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}</select></Field></div>
+    {classification === 'opening' && <div className="operation-rule"><span>إذا كان هناك رصيد افتتاحي سابق لنفس الحساب والمالك والعملة، فلن نضيفه مرة ثانية؛ سيتم تعديل الرصيد الافتتاحي الموجود وتوحيد أي إدخالات مكررة قديمة.</span></div>}
+    <button className="primary wide" type="submit">{classification === 'opening' ? 'حفظ الرصيد الافتتاحي' : 'إضافة الدخل'}</button>
   </form></FormShell>
 }
 
@@ -312,7 +317,7 @@ function helpFor(action: ActionKey) {
   return ({
     purchase: 'حدد حساب الدفع، ثم الأصل وما دفعته وما استلمته، ثم حساب حفظ الأصل. المجموعة لا تدخل في القيد.',
     transfer: 'النقل يحدث بين حسابين؛ تغيير مجموعة أي حساب لا ينقل المال.',
-    funds: 'كل رصيد يسكن داخل حساب واحد واضح. المجموعة اختيارية للتنظيم فقط.',
+    funds: 'الرصيد الافتتاحي حالة بداية تسجل مرة واحدة ويمكن تعديلها؛ الدخل حركة متكررة. كل رصيد يسكن داخل حساب واحد واضح.',
     existing: 'الأصل القديم يسجل داخل الحساب الذي يحتويه الآن، بلا اختراع حركة شراء حالية.',
     portfolio: 'المحفظة غرض اقتصادي يمكن أن يمتد عبر حسابات ومجموعات متعددة.',
     allocate: 'التخصيص يجيب لماذا، ولا يغير الحساب الذي يحتوي الأصل.',

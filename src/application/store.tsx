@@ -23,6 +23,7 @@ import {
   type UpdateExpenseBeneficiaryInput, type UpdateExpenseCategoryInput,
 } from './expenses'
 import { reviseTransaction, type ReviseTransactionInput } from './transactionRevisions'
+import { setOpeningBalance, voidOpeningBalance } from './openingBalances'
 
 interface FinanceContextValue {
   state: FinanceState
@@ -34,6 +35,7 @@ interface FinanceContextValue {
   archiveAccountGroup: (groupId: string) => void
   moveAccountToGroup: (accountId: string, groupId?: string) => void
   addFunds: (input: AddFundsInput) => void
+  voidOpeningBalance: (transactionId: string, reason: string) => void
   addExistingAsset: (input: ExistingAssetInput) => void
   purchaseAsset: (input: SimplifiedPurchaseInput) => void
   transferFunds: (input: TransferFundsInput) => void
@@ -122,7 +124,8 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     updateAccountGroup: (input) => persist(updateAccountGroup(state, input)),
     archiveAccountGroup: (groupId) => persist(archiveAccountGroup(state, groupId)),
     moveAccountToGroup: (accountId, groupId) => persist(moveAccountToGroup(state, accountId, groupId)),
-    addFunds: (input) => persist(addFunds(state, input)),
+    addFunds: (input) => persist(input.classification === 'opening' ? setOpeningBalance(state, input) : addFunds(state, input)),
+    voidOpeningBalance: (transactionId, reason) => persist(voidOpeningBalance(state, transactionId, reason)),
     addExistingAsset: (input) => persist(addExistingAsset(state, input)),
     purchaseAsset: (input) => persist(purchaseAssetSimplified(state, input)),
     transferFunds: (input) => persist(transferFunds(state, input)),
