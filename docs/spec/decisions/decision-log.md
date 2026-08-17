@@ -32,7 +32,7 @@ No duplicate wealth records simply to support different UI trees.
 Status: `Approved`
 
 Decision:
-Do not maintain separate competing “Portfolio” and “Allocation” domain trees. Use hierarchical Portfolio plus PortfolioSlices of real Holdings.
+Do not maintain separate competing “Portfolio” and “Allocation” domain trees. Use hierarchical Portfolio plus Portfolio allocation over real owned Assets.
 
 Consequence:
 Portfolio can span multiple accounts and asset classes without pretending money moved.
@@ -79,16 +79,20 @@ Never use one blended cost across owners. Unknown cost remains unknown.
 
 ---
 
-## DEC-008 — Available means unallocated Holding quantity
-Status: `Approved`
+## DEC-008 — Available means unallocated owned quantity
+Status: `Approved; refined by ADR-002`
 
 Decision:
-Available is the Owner’s native Holding quantity not assigned to PortfolioSlices.
+Available is the Owner’s native Asset quantity not economically assigned to Portfolios.
+
+For the future clean rebuild, ordinary availability is evaluated at `Owner + Asset` economic level across eligible Holdings/Accounts, not necessarily one Holding at a time.
 
 Not:
 - bank balance;
 - total net worth minus Portfolio targets;
 - another owner’s free quantity.
+
+For liquid cash, the user-facing decision metric is **Free Liquidity / السيولة الحرة**.
 
 ---
 
@@ -205,23 +209,41 @@ Scenario reference: `docs/spec/scenarios/SCN-001-precious-metals-distributed-cus
 ---
 
 ## DEC-019 — Ordinary Portfolio allocation may be custody-independent
-Status: `Draft architectural refinement — not yet Approved`
+Status: `Superseded by ADR-002 — Approved`
 
-Proposal:
-Evaluate replacing ordinary `PortfolioSlice -> Holding` coupling with an economic allocation at `Owner + Asset` level (conceptually `OwnerAssetPosition + PortfolioAllocation`). Exact physical Holding/Item reservation would become optional when the user explicitly wants a particular bar/location earmarked.
+Historical proposal:
+Evaluate replacing ordinary `PortfolioSlice -> Holding` coupling with an economic allocation at `Owner + Asset` level and make exact physical Holding/Item reservation optional.
 
-Reason:
-The precious-metals scenario shows that moving Gold from Home to Bank should not require a purpose/Portfolio rewrite when only custody changed.
+Resolution:
+The user clarified that the reason for assigning Portfolio money to bank balances was to protect it from unrestricted spending, not because Portfolio purpose inherently belongs to a bank. `ADR-002` approves economic `Owner + Asset` Portfolio allocation by default and derives Free Liquidity across Accounts. Exact Account/Holding backing is optional.
 
-Potential consequence if approved:
-- purpose remains stable across custody transfers;
-- Portfolio allocation invariant moves from `Owner+Holding` to aggregate `Owner+Asset`;
-- an optional physical reservation layer handles exact-bar/location earmarking;
-- `ENT-041/RULE-004/RULE-005` and database design would need deliberate superseding edits.
+Scenario references:
+- `docs/spec/scenarios/SCN-001-precious-metals-distributed-custody.md`
+- `docs/spec/scenarios/SCN-002-income-producing-assets-and-investment-portfolio.md`
 
-Do not implement this proposal until explicitly approved.
+---
 
-Scenario reference: `docs/spec/scenarios/SCN-001-precious-metals-distributed-custody.md`.
+## DEC-020 — Free Liquidity is a first-class decision metric
+Status: `Approved`
+
+Decision:
+For liquid Assets such as SAR Cash, MyFinMan must distinguish physical cash owned from cash free for unrestricted spending.
+
+Example:
+
+```text
+Total SAR Cash across banks = 1,000,000
+Portfolio-reserved SAR Cash =   950,000
+Free Liquidity             =    50,000
+```
+
+The user should see and behave against `50,000` as unrestricted spendable cash even though bank balances total `1,000,000`.
+
+A physical payment can come from any eligible bank account. It changes that Account's real balance, while purpose consumption is determined by the selected Portfolio or by Free Liquidity. No fake bank transfer is created merely to make purpose allocation match the payment account.
+
+If unrestricted spending would consume reserved money or push Free Liquidity below zero, the product must require an explicit decision rather than silently overspend Portfolio allocations.
+
+Full rationale and target architecture: `docs/spec/decisions/ADR-002-portfolio-allocation-and-free-liquidity.md`.
 
 ---
 
