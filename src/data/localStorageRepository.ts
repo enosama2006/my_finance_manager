@@ -1,7 +1,8 @@
 import type { Account, FinanceState, Holding } from '../domain/types'
 import type { FinanceRepository } from './repository'
 
-const STORAGE_KEY = 'myfinman-foundation-v4'
+// New user-data namespace: intentionally does not reuse the old demo-seeded storage key.
+const STORAGE_KEY = 'myfinman-user-foundation-v1'
 
 type LegacyFinanceStateV4 = Omit<FinanceState, 'accounts' | 'holdings'> & {
   accounts: Array<Omit<Account, 'kind'> & { kind: Account['kind'] | 'cash' }>
@@ -18,7 +19,7 @@ function migrateCashModel(parsed: LegacyFinanceStateV4): FinanceState {
     kind: holding.kind === 'currency' ? 'cash' : holding.kind,
   }))
 
-  return { ...parsed, accounts, holdings }
+  return { ...parsed, accounts, holdings, expenseCategories: parsed.expenseCategories ?? [] }
 }
 
 export function createLocalStorageFinanceRepository(storage: Storage = window.localStorage): FinanceRepository {
