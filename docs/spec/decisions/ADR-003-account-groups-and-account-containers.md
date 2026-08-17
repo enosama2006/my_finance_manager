@@ -46,6 +46,28 @@ Examples:
 
 Account remains the direct container referenced by Holdings.
 
+#### Account metadata editing
+An existing Account may be edited without replacing its identity.
+
+Editable metadata in the current prototype:
+- display name;
+- AccountKind;
+- base/display currency metadata;
+- last four digits;
+- organizational AccountGroup.
+
+Editing an Account MUST preserve:
+- Account ID;
+- Holdings and their Account references;
+- OwnershipShares;
+- Cost Basis lots;
+- Portfolio allocations;
+- Ledger history.
+
+Changing AccountGroup is organizational only. Renaming an Account or changing currency metadata must never manufacture a Transfer or rewrite historical transactions.
+
+A semantic boundary change between ordinary Account kinds and `credit_card` is not treated as a harmless rename when the Account already has Holdings. In that case the user must create the correctly typed Account rather than silently reinterpret existing financial history.
+
 ### Holding
 Answers: **ماذا أملك وكم؟**
 
@@ -81,6 +103,9 @@ The clean target persistence model should revisit whether `custodianId` remains 
 5. Accounts may exist without a Group.
 6. Group hierarchy must prevent cycles.
 7. A Group cannot be archived while active child Groups or Accounts remain attached.
+8. Editing Account metadata preserves Account identity and financial history.
+9. Renaming or metadata editing an Account must not move Holdings or create Ledger entries.
+10. A funded Account cannot silently cross the ordinary-account/credit-card semantic boundary.
 
 ## UX consequence
 Default Assets & Accounts lens becomes `مجموعاتي`:
@@ -99,6 +124,8 @@ Default Assets & Accounts lens becomes `مجموعاتي`:
 ```
 
 Other lenses such as Owner and Asset Type continue to recompose the same financial truth.
+
+From `مجموعات الحسابات`, every active Account row exposes an edit action. Editing opens a responsive Modal/Sheet in context rather than forcing the user back to the create form or changing scroll position.
 
 ## Superseded prototype direction
 The mandatory `Place → Account → Holding` presentation introduced in PR #21 is superseded by this ADR.
