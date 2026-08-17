@@ -4,10 +4,33 @@ import type { ConversionInput, FinanceState } from '../domain/types'
 import { seedState } from '../data/seed'
 import { createLocalStorageFinanceRepository } from '../data/localStorageRepository'
 import { runScenario, type ScenarioId } from './scenarios'
+import {
+  addAccount,
+  addExistingAsset,
+  addFunds,
+  allocateToPortfolio,
+  createPortfolio,
+  purchaseAsset,
+  transferFunds,
+  type AddAccountInput,
+  type AddFundsInput,
+  type AllocateToPortfolioInput,
+  type CreatePortfolioInput,
+  type ExistingAssetInput,
+  type PurchaseAssetInput,
+  type TransferFundsInput,
+} from './commands'
 
 interface FinanceContextValue {
   state: FinanceState
   convert: (input: ConversionInput) => void
+  addAccount: (input: AddAccountInput) => void
+  addFunds: (input: AddFundsInput) => void
+  addExistingAsset: (input: ExistingAssetInput) => void
+  purchaseAsset: (input: PurchaseAssetInput) => void
+  transferFunds: (input: TransferFundsInput) => void
+  createPortfolio: (input: CreatePortfolioInput) => void
+  allocateToPortfolio: (input: AllocateToPortfolioInput) => void
   runScenario: (id: ScenarioId) => void
   reset: () => void
 }
@@ -35,6 +58,13 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
   const value = useMemo<FinanceContextValue>(() => ({
     state,
     convert: (input) => persist(applyConversion(state, input)),
+    addAccount: (input) => persist(addAccount(state, input)),
+    addFunds: (input) => persist(addFunds(state, input)),
+    addExistingAsset: (input) => persist(addExistingAsset(state, input)),
+    purchaseAsset: (input) => persist(purchaseAsset(state, input)),
+    transferFunds: (input) => persist(transferFunds(state, input)),
+    createPortfolio: (input) => persist(createPortfolio(state, input)),
+    allocateToPortfolio: (input) => persist(allocateToPortfolio(state, input)),
     runScenario: (id) => persist(runScenario(state, id)),
     reset: () => {
       repository.clear()

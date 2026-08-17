@@ -1,27 +1,44 @@
-import { ChartNoAxesCombined, CircleDollarSign, Gauge, ReceiptText, RotateCcw, WalletCards, Boxes, Activity } from 'lucide-react'
+import { Activity, Boxes, ChartNoAxesCombined, CircleDollarSign, CirclePlus, Gauge, ReceiptText, RotateCcw, WalletCards } from 'lucide-react'
 import type { ReactNode } from 'react'
 
-export type PageKey = 'dashboard' | 'assets' | 'allocations' | 'ledger' | 'trade' | 'lab'
+export type PageKey = 'dashboard' | 'assets' | 'allocations' | 'operations' | 'ledger' | 'trade' | 'lab'
 
-const items: { id: PageKey; label: string; short: string; icon: typeof Gauge }[] = [
-  { id: 'lab', label: 'مختبر التشغيل المالي', short: 'المختبر', icon: Activity },
-  { id: 'dashboard', label: 'نظرة عامة', short: 'الرئيسية', icon: Gauge },
-  { id: 'allocations', label: 'المحافظ', short: 'المحافظ', icon: Boxes },
-  { id: 'assets', label: 'الأصول والحسابات', short: 'الأصول', icon: WalletCards },
-  { id: 'ledger', label: 'الحركات', short: 'الحركات', icon: ReceiptText },
+const items: { id: PageKey; label: string; short: string; icon: typeof Gauge; mobile?: boolean }[] = [
+  { id: 'dashboard', label: 'نظرة عامة', short: 'الرئيسية', icon: Gauge, mobile: true },
+  { id: 'allocations', label: 'المحافظ', short: 'المحافظ', icon: Boxes, mobile: true },
+  { id: 'operations', label: 'العمليات المالية', short: 'إضافة', icon: CirclePlus, mobile: true },
+  { id: 'assets', label: 'الأصول والحسابات', short: 'الأصول', icon: WalletCards, mobile: true },
+  { id: 'ledger', label: 'الحركات', short: 'الحركات', icon: ReceiptText, mobile: true },
   { id: 'trade', label: 'تحويل الأصول', short: 'تحويل', icon: ChartNoAxesCombined },
+  { id: 'lab', label: 'مختبر السيناريوهات', short: 'المختبر', icon: Activity },
 ]
 
 export function Shell({ page, onPage, onReset, children }: { page: PageKey; onPage: (p: PageKey) => void; onReset: () => void; children: ReactNode }) {
   const current = items.find((x) => x.id === page)
+  const mobileItems = items.filter(x => x.mobile)
   return <div className="app-stage"><div className="app-shell">
-    <header className="mobile-header">
-      <div className="brand-lockup"><div className="brand-mark"><CircleDollarSign size={22} /></div><div><span className="eyebrow">MYFINMAN / OPERATING LAB V1</span><strong>{current?.label}</strong></div></div>
-      <button className="icon-button" onClick={onReset} aria-label="إعادة البيانات التجريبية" title="إعادة البيانات التجريبية"><RotateCcw size={18} /></button>
-    </header>
-    <main className="main-area"><div className="content">{children}</div></main>
-    <nav className="bottom-nav" aria-label="التنقل الرئيسي">
-      {items.map(({ id, short, icon: Icon }) => <button key={id} className={page === id ? 'bottom-nav-item active' : 'bottom-nav-item'} onClick={() => onPage(id)}><span className="bottom-nav-icon"><Icon size={20} strokeWidth={page === id ? 2.5 : 2} /></span><span>{short}</span></button>)}
+    <aside className="side-nav" aria-label="التنقل الرئيسي">
+      <button className="side-brand" onClick={() => onPage('dashboard')}><span className="brand-mark"><CircleDollarSign size={23} /></span><span><b>MyFinMan</b><small>Personal Finance OS</small></span></button>
+      <div className="side-nav-items">
+        {items.map(({ id, label, icon: Icon }) => <button key={id} className={page === id ? 'side-nav-item active' : 'side-nav-item'} onClick={() => onPage(id)}><span className="side-nav-icon"><Icon size={20} /></span><span className="side-nav-label">{label}</span></button>)}
+      </div>
+      <div className="side-nav-footer"><span>OPERATING FOUNDATION</span><small>RTL • Responsive • Audit-first</small></div>
+    </aside>
+
+    <div className="app-main-column">
+      <header className="app-header">
+        <div className="header-brand-mobile"><div className="brand-mark"><CircleDollarSign size={22} /></div></div>
+        <div className="header-context"><span className="eyebrow">MYFINMAN / OPERATING FOUNDATION</span><strong>{current?.label}</strong></div>
+        <div className="header-actions">
+          {page !== 'operations' && <button className="quick-action-button" onClick={() => onPage('operations')}><CirclePlus size={17} /><span>عملية جديدة</span></button>}
+          <button className="icon-button" onClick={onReset} aria-label="إعادة البيانات التجريبية" title="إعادة البيانات التجريبية"><RotateCcw size={18} /></button>
+        </div>
+      </header>
+      <main className="main-area"><div className="content">{children}</div></main>
+    </div>
+
+    <nav className="bottom-nav" aria-label="التنقل الرئيسي على الجوال">
+      {mobileItems.map(({ id, short, icon: Icon }) => <button key={id} className={page === id ? 'bottom-nav-item active' : 'bottom-nav-item'} onClick={() => onPage(id)}><span className="bottom-nav-icon"><Icon size={20} strokeWidth={page === id ? 2.5 : 2} /></span><span>{short}</span></button>)}
     </nav>
   </div></div>
 }
