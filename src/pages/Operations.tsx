@@ -1,6 +1,7 @@
 import { ArrowLeftRight, BanknoteArrowDown, Boxes, CirclePlus, FolderPlus, Landmark, PackagePlus, ShoppingCart, WalletCards } from 'lucide-react'
 import { useMemo, useState, type FormEvent, type ReactNode } from 'react'
 import { useFinance } from '../application/store'
+import type { AddAccountInput, AddFundsInput, AllocateToPortfolioInput, CreatePortfolioInput, ExistingAssetInput, PurchaseAssetInput, TransferFundsInput } from '../application/commands'
 import { availableQuantity, ownerQuantity, ownerWeightedAverageCostSar, round2 } from '../domain/finance'
 import type { AccountKind, AssetKind, PerformanceRole, PortfolioProfile } from '../domain/types'
 import { SELF_ID } from '../data/seed'
@@ -71,13 +72,13 @@ export function Operations({ goTrade }: { goTrade: () => void }) {
 
     <section className="operation-workspace">
       <div className="operation-form-panel">
-        {action === 'purchase' && <PurchaseForm state={state} ownerId={SELF_ID} cashHoldings={cashHoldings} accounts={accounts} portfolios={portfolios} onSubmit={(input) => execute(() => finance.purchaseAsset(input), 'تم شراء الأصل وتحديث الحساب وCost Basis والمركز.')} />}
-        {action === 'transfer' && <TransferForm state={state} ownerId={SELF_ID} cashHoldings={cashHoldings} accounts={accounts} onSubmit={(input) => execute(() => finance.transferFunds(input), 'تم نقل الأموال بين الحسابات بدون تسجيل ربح أو خسارة.')} />}
-        {action === 'funds' && <FundsForm owners={owners} accounts={accounts} portfolios={portfolios} onSubmit={(input) => execute(() => finance.addFunds(input), 'تمت إضافة الرصيد وحفظ مصدره في الحركات.')} />}
-        {action === 'existing' && <ExistingAssetForm owners={owners} accounts={accounts} portfolios={portfolios} onSubmit={(input) => execute(() => finance.addExistingAsset(input), 'تم تسجيل الأصل القائم بدون إنشاء دفع مصرفي وهمي.')} />}
-        {action === 'portfolio' && <PortfolioForm owners={owners} portfolios={portfolios} onSubmit={(input) => execute(() => finance.createPortfolio(input), 'تم إنشاء المحفظة.')} />}
-        {action === 'allocate' && <AllocateForm state={state} owners={owners} holdings={ownedHoldings} portfolios={portfolios} onSubmit={(input) => execute(() => finance.allocateToPortfolio(input), 'تم تخصيص الأصل للمحفظة بدون حركة نقدية فعلية.')} />}
-        {action === 'account' && <AccountForm parties={state.parties} onSubmit={(input) => execute(() => finance.addAccount(input), 'تم إنشاء الحساب/الحاوية وأصبح متاحًا للعمليات.')} />}
+        {action === 'purchase' && <PurchaseForm state={state} ownerId={SELF_ID} cashHoldings={cashHoldings} accounts={accounts} portfolios={portfolios} onSubmit={(input: PurchaseAssetInput) => execute(() => finance.purchaseAsset(input), 'تم شراء الأصل وتحديث الحساب وCost Basis والمركز.')} />}
+        {action === 'transfer' && <TransferForm state={state} ownerId={SELF_ID} cashHoldings={cashHoldings} accounts={accounts} onSubmit={(input: TransferFundsInput) => execute(() => finance.transferFunds(input), 'تم نقل الأموال بين الحسابات بدون تسجيل ربح أو خسارة.')} />}
+        {action === 'funds' && <FundsForm owners={owners} accounts={accounts} portfolios={portfolios} onSubmit={(input: AddFundsInput) => execute(() => finance.addFunds(input), 'تمت إضافة الرصيد وحفظ مصدره في الحركات.')} />}
+        {action === 'existing' && <ExistingAssetForm owners={owners} accounts={accounts} portfolios={portfolios} onSubmit={(input: ExistingAssetInput) => execute(() => finance.addExistingAsset(input), 'تم تسجيل الأصل القائم بدون إنشاء دفع مصرفي وهمي.')} />}
+        {action === 'portfolio' && <PortfolioForm owners={owners} portfolios={portfolios} onSubmit={(input: CreatePortfolioInput) => execute(() => finance.createPortfolio(input), 'تم إنشاء المحفظة.')} />}
+        {action === 'allocate' && <AllocateForm state={state} owners={owners} holdings={ownedHoldings} portfolios={portfolios} onSubmit={(input: AllocateToPortfolioInput) => execute(() => finance.allocateToPortfolio(input), 'تم تخصيص الأصل للمحفظة بدون حركة نقدية فعلية.')} />}
+        {action === 'account' && <AccountForm parties={state.parties} onSubmit={(input: AddAccountInput) => execute(() => finance.addAccount(input), 'تم إنشاء الحساب/الحاوية وأصبح متاحًا للعمليات.')} />}
       </div>
       <aside className="operation-help">
         <WalletCards size={20} />
