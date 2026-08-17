@@ -48,6 +48,7 @@ Use stable IDs in docs, code comments, tests and PR descriptions:
 - `DB-xxx` — target database table or persistence concept.
 - `TEST-xxx` — acceptance scenario/test.
 - `SCN-xxx` — exploratory real-world scenario used to discover/refine rules.
+- `BMK-xxx` — benchmark ambition or target capability used to judge product maturity.
 - `ADR-xxx` — architecture/product decision record.
 
 IDs are never recycled after publication.
@@ -57,6 +58,9 @@ IDs are never recycled after publication.
 ### Product and scope
 - `product/product-definition.md` — what MyFinMan is and is not.
 - `prototype/prototype-vs-target.md` — what the current proof-of-concept means for the future rewrite.
+
+### Benchmark ambitions
+- `benchmark/benchmark-ambition.md` — target financial-management capabilities beyond expense tracking; currently Draft and expanded through benchmark research plus user scenarios.
 
 ### UX / Screens
 - `ux/responsive-shell.md` — one responsive product for mobile, tablet and desktop.
@@ -92,7 +96,7 @@ Scenarios are not merely examples. They are used to pressure-test the model. Eac
 
 For any meaningful feature or behavior change:
 
-1. Identify the affected `SCR/ACT/UC/ENT/RULE/CALC/DB/TEST/SCN` IDs.
+1. Identify the affected `SCR/ACT/UC/ENT/RULE/CALC/DB/TEST/SCN/BMK` IDs.
 2. Update or create the specification **before or in the same PR as code**.
 3. If the behavior is unresolved, mark it `TBD`; do not code a guessed behavior.
 4. Record architectural/product decisions in the decision log or an ADR.
