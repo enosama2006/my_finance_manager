@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { emptyState } from '../src/data/emptyState'
 import { seedState, SELF_ID } from '../src/data/seed'
 import {
+  createExpenseBeneficiary,
   createExpenseCategory,
   createParty,
   expenseCategorySpentSar,
@@ -40,6 +41,21 @@ describe('hierarchical expense categories', () => {
 
     expect(electricity.parentId).toBe(services.id)
     expect(() => updateExpenseCategory(state, { id: housing.id, name: 'السكن', parentId: electricity.id })).toThrow()
+  })
+
+  it('stores a financial necessity default independently from the category path', () => {
+    const state = createExpenseCategory(clone(emptyState), { name: 'الإيجار', defaultNecessity: 'obligation' })
+    expect(state.expenseCategories![0].defaultNecessity).toBe('obligation')
+  })
+})
+
+describe('expense beneficiaries', () => {
+  it('supports individual and group reporting targets without multiplying spend', () => {
+    let state = clone(emptyState)
+    state = createExpenseBeneficiary(state, { name: 'أنا', kind: 'person' })
+    state = createExpenseBeneficiary(state, { name: 'العائلة', kind: 'group' })
+    expect(state.expenseBeneficiaries).toHaveLength(2)
+    expect(state.expenseBeneficiaries?.find(b => b.name === 'العائلة')?.kind).toBe('group')
   })
 })
 
@@ -108,5 +124,27 @@ describe('expense posting', () => {
 
     expect(expenseCategorySpentSar(state, electricity.id)).toBe(250)
     expect(expenseCategorySpentSar(state, housing.id)).toBe(250)
+  })
+
+  it('snapshots category necessity and beneficiary onto the expense transaction', () => {
+    let state = clone(seedState)
+    state = createExpenseCategory(state, { name: 'مطاعم', defaultNecessity: 'discretionary' })
+    const categoryId = state.expenseCategories!.find(c => c.name === 'مطاعم')!.id
+    state = createExpenseBeneficiary(state, { name: 'العائلة', kind: 'group' })
+    const beneficiaryId = state.expenseBeneficiaries![0].id
+
+    const next = spendExpense(state, { sourceHoldingId: 'h-alrajhi-sar', ownerId: SELF_ID, quantity: 300, expenseCategoryId: categoryId, expenseBeneficiaryId: beneficiaryId })
+    expect(next.ledger[0].expenseNecessity).toBe('discretionary')
+    expect(next.ledger[0].expenseBeneficiaryId).toBe(beneficiaryId)
+    expect(next.ledger[0].amountSar).toBe(300)
+  })
+
+  it('allows a transaction-level necessity override without mutating the category default', () => {
+    let state = clone(seedState)
+    state = createExpenseCategory(state, { name: 'مطاعم', defaultNecessity: 'discretionary' })
+    const category = state.expenseCategories!.find(c => c.name === 'مطاعم')!
+    const next = spendExpense(state, { sourceHoldingId: 'h-alrajhi-sar', ownerId: SELF_ID, quantity: 100, expenseCategoryId: category.id, expenseNecessity: 'essential' })
+    expect(next.ledger[0].expenseNecessity).toBe('essential')
+    expect(next.expenseCategories!.find(c => c.id === category.id)?.defaultNecessity).toBe('discretionary')
   })
 })

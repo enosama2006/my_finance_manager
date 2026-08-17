@@ -1,25 +1,26 @@
-import { Banknote, Boxes, CircleAlert, ReceiptText } from 'lucide-react'
+import { Banknote, Boxes, CircleAlert, ReceiptText, UserRound } from 'lucide-react'
 import { useMemo, useState, type FormEvent } from 'react'
 import { useFinance } from '../application/store'
 import { useToast } from '../components/ToastProvider'
 import { availableQuantity, ownerQuantity, round2 } from '../domain/finance'
-import type { ExpenseCategory } from '../domain/types'
+import type { ExpenseCategory, ExpenseNecessity } from '../domain/types'
 import { SELF_ID } from '../data/seed'
 
 const money = new Intl.NumberFormat('ar-SA', { maximumFractionDigits: 2 })
+const necessityLabels: Record<ExpenseNecessity, string> = { obligation: 'التزام ملزم', essential: 'أساسي', flexible: 'مرن', discretionary: 'كمالي / اختياري' }
 
-function categoryPath(all: ExpenseCategory[], category: ExpenseCategory): string {
-  const parts = [category.name]
-  let current = category
+function categoryPath(all: ExpenseCategory[], id?: string): ExpenseCategory[] {
+  if (!id) return []
+  const result: ExpenseCategory[] = []
+  let current = all.find(c => c.id === id)
   const seen = new Set<string>()
-  while (current.parentId && !seen.has(current.parentId)) {
-    seen.add(current.parentId)
-    const parent = all.find(c => c.id === current.parentId)
-    if (!parent) break
-    parts.unshift(parent.name)
-    current = parent
-  }
-  return parts.join(' ← ')
+  while (current && !seen.has(current.id)) { seen.add(current.id); result.unshift(current); current = current.parentId ? all.find(c => c.id === current!.parentId) : undefined }
+  return result
+}
+function effectiveNecessity(all: ExpenseCategory[], id?: string): ExpenseNecessity | undefined {
+  const path = categoryPath(all, id)
+  for (let i = path.length - 1; i >= 0; i -= 1) if (path[i].defaultNecessity) return path[i].defaultNecessity
+  return undefined
 }
 
 export function SpendExpense() {
@@ -28,12 +29,15 @@ export function SpendExpense() {
   const { state } = finance
   const owners = state.parties.filter(p => p.type === 'self' || p.type === 'person')
   const categories = (state.expenseCategories ?? []).filter(c => c.status === 'active')
+  const beneficiaries = (state.expenseBeneficiaries ?? []).filter(b => b.status === 'active')
   const [ownerId, setOwnerId] = useState(owners.find(o => o.id === SELF_ID)?.id ?? owners[0]?.id ?? '')
   const cashHoldings = useMemo(() => state.holdings.filter(h => !h.archived && h.kind === 'cash' && ownerQuantity(h, ownerId) > 0), [state.holdings, ownerId])
   const portfolios = state.portfolios.filter(p => p.status === 'active' && p.ownerIds.includes(ownerId))
   const [sourceHoldingId, setSourceHoldingId] = useState(cashHoldings[0]?.id ?? '')
-  const [categoryId, setCategoryId] = useState(categories[0]?.id ?? '')
+  const [categoryId, setCategoryId] = useState('')
   const [portfolioId, setPortfolioId] = useState('')
+  const [beneficiaryId, setBeneficiaryId] = useState('')
+  const [necessityOverride, setNecessityOverride] = useState<ExpenseNecessity | ''>('')
   const [quantity, setQuantity] = useState('')
   const [title, setTitle] = useState('')
   const [note, setNote] = useState('')
@@ -44,31 +48,52 @@ export function SpendExpense() {
   const amountSar = source ? round2(amount * source.marketPriceSar) : 0
   const freeQty = source ? availableQuantity(state, source.id, ownerId) : 0
   const portfolioValue = portfolioId ? round2(state.portfolioSlices.filter(s => s.portfolioId === portfolioId && s.ownerId === ownerId).reduce((sum, s) => {
-    const h = state.holdings.find(x => x.id === s.holdingId && !x.archived)
-    return sum + (h ? s.quantity * h.marketPriceSar : 0)
+    const h = state.holdings.find(x => x.id === s.holdingId && !x.archived); return sum + (h ? s.quantity * h.marketPriceSar : 0)
   }, 0)) : 0
+  const inheritedNecessity = effectiveNecessity(categories, categoryId)
+  const finalNecessity = necessityOverride || inheritedNecessity
 
   const submit = (event: FormEvent) => {
     event.preventDefault()
     try {
-      finance.spendExpense({ sourceHoldingId, ownerId, quantity: amount, expenseCategoryId: categoryId, portfolioId: portfolioId || undefined, title: title || undefined, note: note || undefined })
-      setQuantity(''); setTitle(''); setNote('')
+      finance.spendExpense({
+        sourceHoldingId, ownerId, quantity: amount, expenseCategoryId: categoryId, portfolioId: portfolioId || undefined,
+        expenseBeneficiaryId: beneficiaryId || undefined, expenseNecessity: necessityOverride || undefined,
+        title: title || undefined, note: note || undefined,
+      })
+      setQuantity(''); setTitle(''); setNote(''); setNecessityOverride('')
       toast.success(portfolioId ? 'تم تسجيل المصروف وخصمه من الحساب واستهلاكه من المحفظة.' : 'تم تسجيل المصروف وخصمه من السيولة الحرة.')
     } catch (error) { toast.error(error instanceof Error ? error.message : 'تعذر تسجيل المصروف') }
   }
 
   const prerequisitesMissing = categories.length === 0 || cashHoldings.length === 0
+  const beneficiary = beneficiaries.find(b => b.id === beneficiaryId)
 
   return <div className="page-stack">
-    <section className="section-intro"><div><span className="eyebrow">EXPENSE / WHAT + WHERE + WHY</span><h2>تسجيل مصروف</h2><p>اختر بند الصرف ليصف «على ماذا؟»، ومصدر الدفع ليصف «من أين خرج؟»، والمحفظة اختيارية لتصف «من أي غرض/مخصص؟».</p></div></section>
-    {prerequisitesMissing && <section className="panel prerequisite-note"><CircleAlert size={20} /><div><strong>قبل أول مصروف</strong><p>{categories.length === 0 ? 'أنشئ بند صرف واحدًا على الأقل من تبويب «بنود الصرف». ' : ''}{cashHoldings.length === 0 ? 'وأضف حسابًا ورصيدًا نقديًا من «العمليات العامة».' : ''}</p></div></section>}
-    <section className="operation-workspace"><div className="operation-form-panel"><div className="panel operation-form"><div className="panel-head"><div><span>حركة مالية فعلية</span><h2>بيانات عملية الصرف</h2><span>المصروف يقلل الثروة. ربطه بمحفظة يستهلك أيضًا من تخصيص المحفظة، لكنه لا يغير حقيقة الحساب الذي دفع.</span></div><ReceiptText size={18} /></div><form className="trade-form" onSubmit={submit}>
-      <div className="field-grid"><label><span>المالك</span><select value={ownerId} onChange={e => { setOwnerId(e.target.value); setSourceHoldingId(''); setPortfolioId('') }}>{owners.map(o => <option key={o.id} value={o.id}>{o.name}</option>)}</select></label><label><span>بند الصرف</span><select value={categoryId} onChange={e => setCategoryId(e.target.value)}><option value="">اختر بندًا</option>{categories.map(c => <option key={c.id} value={c.id}>{categoryPath(categories, c)}</option>)}</select></label></div>
-      <label><span>مصدر الدفع الفعلي</span><select value={sourceHoldingId} onChange={e => setSourceHoldingId(e.target.value)}><option value="">اختر رصيدًا</option>{cashHoldings.map(h => <option key={h.id} value={h.id}>{state.parties.find(p => p.id === h.custodianId)?.name ?? ''} ← {state.accounts.find(a => a.id === h.accountId)?.name ?? h.name} — {ownerQuantity(h, ownerId).toLocaleString('ar-SA')} {h.nativeUnit}</option>)}</select><small>{source ? `المتاح الحر في هذا الرصيد: ${freeQty.toLocaleString('ar-SA')} ${source.nativeUnit}` : 'اختر الحساب/الرصيد الذي خرج منه المال فعليًا.'}</small></label>
-      <div className="field-grid"><label><span>الكمية المصروفة {source ? `(${source.nativeUnit})` : ''}</span><input value={quantity} onChange={e => setQuantity(e.target.value)} inputMode="decimal" placeholder="0" /></label><label><span>المحفظة</span><select value={portfolioId} onChange={e => setPortfolioId(e.target.value)}><option value="">بلا محفظة — من السيولة الحرة</option>{portfolios.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}</select><small>{portfolioId ? `الرصيد الاقتصادي المخصص حاليًا: ${money.format(portfolioValue)} ر.س` : 'لن يُستهلك أي تخصيص محفظة.'}</small></label></div>
-      <div className="field-grid"><label><span>عنوان مختصر (اختياري)</span><input value={title} onChange={e => setTitle(e.target.value)} placeholder="فاتورة كهرباء أغسطس" /></label><label><span>ملاحظة (اختياري)</span><input value={note} onChange={e => setNote(e.target.value)} /></label></div>
-      <div className="inline-preview"><span>القيمة بالتقارير</span><strong>{money.format(amountSar)} ر.س</strong><small>{source ? `${amount.toLocaleString('ar-SA')} ${source.nativeUnit} × ${source.marketPriceSar.toLocaleString('ar-SA')} ر.س` : 'اختر مصدر الدفع'}</small></div>
+    <section className="section-intro"><div><span className="eyebrow">WHAT + WHERE + WHY + WHO</span><h2>تسجيل مصروف</h2><p>بند الصرف يحدد «على ماذا؟»، الحساب «من أين؟»، المحفظة «من أي غرض؟»، والمستفيد «لصالح من؟». درجة الضرورة تصف قابلية الاستغناء ماليًا وليست حكمًا أخلاقيًا على المصروف.</p></div></section>
+    {prerequisitesMissing && <section className="panel prerequisite-note"><CircleAlert size={20}/><div><strong>قبل أول مصروف</strong><p>{categories.length === 0 ? 'أنشئ بند صرف واحدًا على الأقل. ' : ''}{cashHoldings.length === 0 ? 'وأضف حسابًا ورصيدًا نقديًا.' : ''}</p></div></section>}
+    <section className="operation-workspace"><div className="operation-form-panel"><div className="panel operation-form"><div className="panel-head"><div><span>حركة مالية فعلية</span><h2>بيانات عملية الصرف</h2><span>يمكن أن يكون «مطاعم» بندًا ثابتًا، بينما يتغير المستفيد من «أنا» إلى «العائلة» من عملية لأخرى.</span></div><ReceiptText size={18}/></div><form className="trade-form" onSubmit={submit}>
+      <div className="field-grid"><label><span>المالك</span><select value={ownerId} onChange={e => { setOwnerId(e.target.value); setSourceHoldingId(''); setPortfolioId('') }}>{owners.map(o => <option key={o.id} value={o.id}>{o.name}</option>)}</select></label><label><span>المستفيد</span><select value={beneficiaryId} onChange={e => setBeneficiaryId(e.target.value)}><option value="">غير محدد</option>{beneficiaries.map(b => <option key={b.id} value={b.id}>{b.name} — {b.kind === 'group' ? 'مجموعة' : 'فرد'}</option>)}</select><small>المستفيد مستقل عن المالك والدافع.</small></label></div>
+      <ExpenseCategoryCascader all={categories} selectedId={categoryId} onChange={id => { setCategoryId(id); setNecessityOverride('') }} />
+      <label><span>درجة الضرورة لهذه العملية</span><select value={necessityOverride} onChange={e => setNecessityOverride(e.target.value as ExpenseNecessity | '')}><option value="">حسب البند{inheritedNecessity ? ` — ${necessityLabels[inheritedNecessity]}` : ' — غير مصنف'}</option><option value="obligation">التزام ملزم</option><option value="essential">أساسي</option><option value="flexible">مرن / قابل للضبط</option><option value="discretionary">كمالي / اختياري</option></select><small>غيّرها هنا فقط إذا كان سياق هذه العملية مختلفًا عن التصنيف الافتراضي للبند.</small></label>
+      <label><span>مصدر الدفع الفعلي</span><select value={sourceHoldingId} onChange={e => setSourceHoldingId(e.target.value)}><option value="">اختر رصيدًا</option>{cashHoldings.map(h => <option key={h.id} value={h.id}>{state.parties.find(p => p.id === h.custodianId)?.name ?? ''} ← {state.accounts.find(a => a.id === h.accountId)?.name ?? h.name} — {ownerQuantity(h, ownerId).toLocaleString('ar-SA')} {h.nativeUnit}</option>)}</select><small>{source ? `المتاح الحر: ${freeQty.toLocaleString('ar-SA')} ${source.nativeUnit}` : 'اختر الحساب/الرصيد الذي خرج منه المال فعليًا.'}</small></label>
+      <div className="field-grid"><label><span>الكمية المصروفة {source ? `(${source.nativeUnit})` : ''}</span><input value={quantity} onChange={e => setQuantity(e.target.value)} inputMode="decimal" placeholder="0" /></label><label><span>المحفظة</span><select value={portfolioId} onChange={e => setPortfolioId(e.target.value)}><option value="">بلا محفظة — من السيولة الحرة</option>{portfolios.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}</select><small>{portfolioId ? `الرصيد الاقتصادي المخصص: ${money.format(portfolioValue)} ر.س` : 'لن يُستهلك أي تخصيص محفظة.'}</small></label></div>
+      <div className="field-grid"><label><span>عنوان مختصر (اختياري)</span><input value={title} onChange={e => setTitle(e.target.value)} placeholder="عشاء عائلي" /></label><label><span>ملاحظة (اختياري)</span><input value={note} onChange={e => setNote(e.target.value)} /></label></div>
+      <div className="inline-preview"><span>القيمة بالتقارير</span><strong>{money.format(amountSar)} ر.س</strong><small>{finalNecessity ? `${necessityLabels[finalNecessity]}${beneficiary ? ` • المستفيد: ${beneficiary.name}` : ''}` : (beneficiary ? `المستفيد: ${beneficiary.name}` : 'لم يحدد تصنيف ضرورة أو مستفيد')}</small></div>
       <button className="primary wide" type="submit" disabled={prerequisitesMissing || !sourceHoldingId || !categoryId}>تسجيل المصروف</button>
-    </form></div></div><aside className="operation-help expense-explain"><Banknote size={20} /><strong>كيف يُقيد؟</strong><div className="expense-dimension"><b>WHAT</b><span>بند الصرف الشجري</span></div><div className="expense-dimension"><b>WHERE</b><span>{sourceAccount?.name ?? 'مصدر الدفع'}</span></div><div className="expense-dimension"><b>WHY</b><span>{portfolioId ? state.portfolios.find(p => p.id === portfolioId)?.name : 'السيولة الحرة'}</span></div><div className="operation-rule"><Boxes size={15} /><span>المحفظة لا تصبح حسابًا. نحن نستهلك غرضها الاقتصادي بينما الخصم المادي يحدث في الحساب المحدد.</span></div></aside></section>
+    </form></div></div><aside className="operation-help expense-explain"><Banknote size={20}/><strong>أبعاد الحركة</strong><div className="expense-dimension"><b>WHAT</b><span>{categoryPath(categories, categoryId).map(c => c.name).join(' ← ') || 'بند الصرف'}</span></div><div className="expense-dimension"><b>WHERE</b><span>{sourceAccount?.name ?? 'مصدر الدفع'}</span></div><div className="expense-dimension"><b>WHY</b><span>{portfolioId ? state.portfolios.find(p => p.id === portfolioId)?.name : 'السيولة الحرة'}</span></div><div className="expense-dimension"><b>WHO</b><span>{beneficiary?.name ?? 'غير محدد'}</span></div><div className="operation-rule"><UserRound size={15}/><span>«العائلة» مجموعة تقرير واحدة؛ لا نوزع المبلغ تلقائيًا على كل فرد حتى لا يحدث Double Counting.</span></div><div className="operation-rule"><Boxes size={15}/><span>مصفوفة مهم/عاجل ليست تصنيفًا محاسبيًا أساسيًا؛ نستخدم ضرورة مالية واضحة، ويمكن إضافة الإلحاح لاحقًا كعدسة تخطيط مستقلة.</span></div></aside></section>
   </div>
+}
+
+function ExpenseCategoryCascader({ all, selectedId, onChange }: { all: ExpenseCategory[]; selectedId: string; onChange: (id: string) => void }) {
+  const path = categoryPath(all, selectedId)
+  const roots = all.filter(c => !c.parentId || !all.some(p => p.id === c.parentId))
+  const levels: ExpenseCategory[][] = [roots]
+  path.forEach(node => { const children = all.filter(c => c.parentId === node.id); if (children.length) levels.push(children) })
+  const choose = (level: number, value: string) => {
+    if (!value) { const next = path.slice(0, level); onChange(next[next.length - 1]?.id ?? ''); return }
+    const chosen = all.find(c => c.id === value); if (!chosen) return
+    const next = [...path.slice(0, level), chosen]; onChange(next[next.length - 1].id)
+  }
+  return <div className="parent-cascader expense-category-cascader"><div className="cascader-label"><span>بند الصرف</span><strong>{path.length ? path.map(c => c.name).join(' ← ') : 'اختر من الشجرة'}</strong></div><div className="cascader-levels">{levels.map((options, index) => <label key={index}><span>المستوى {index + 1}</span><select value={path[index]?.id ?? ''} onChange={e => choose(index, e.target.value)}><option value="">{index === 0 ? 'اختر بندًا رئيسيًا' : 'اكتفِ بالمستوى السابق'}</option>{options.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</select></label>)}</div></div>
 }

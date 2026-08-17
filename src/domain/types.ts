@@ -13,6 +13,9 @@ export type PositionStatus = 'open' | 'partially_disposed' | 'closed'
 export type CapitalCycleStatus = 'open' | 'partially_settled' | 'ready_to_close' | 'closed' | 'cancelled'
 export type CapitalCycleKind = 'investment_round' | 'commercial_operation' | 'commitment_period' | 'savings_period' | 'spending_period' | 'fixed_term_round'
 export type ExpenseCategoryStatus = 'active' | 'archived'
+export type ExpenseNecessity = 'obligation' | 'essential' | 'flexible' | 'discretionary'
+export type ExpenseBeneficiaryStatus = 'active' | 'archived'
+export type ExpenseBeneficiaryKind = 'person' | 'group'
 
 export interface Party {
   id: string
@@ -35,18 +38,8 @@ export interface Account {
   observedAt?: string
 }
 
-export interface OwnershipShare {
-  ownerId: string
-  quantity: number
-}
-
-export interface CostBasisLot {
-  id: string
-  ownerId: string
-  quantity: number
-  unitCostSar?: number
-  acquiredAt?: string
-}
+export interface OwnershipShare { id?: string; ownerId: string; quantity: number }
+export interface CostBasisLot { id: string; ownerId: string; quantity: number; unitCostSar?: number; acquiredAt?: string }
 
 export interface Holding {
   id: string
@@ -86,19 +79,23 @@ export interface Portfolio {
   protectionMode?: 'flexible' | 'designated' | 'hard_reserved' | 'instrument_bound'
 }
 
-export interface PortfolioSlice {
-  id: string
-  portfolioId: string
-  holdingId: string
-  ownerId: string
-  quantity: number
-}
+export interface PortfolioSlice { id: string; portfolioId: string; holdingId: string; ownerId: string; quantity: number }
 
 export interface ExpenseCategory {
   id: string
   name: string
   parentId?: string
   status: ExpenseCategoryStatus
+  description?: string
+  defaultNecessity?: ExpenseNecessity
+  createdAt: string
+}
+
+export interface ExpenseBeneficiary {
+  id: string
+  name: string
+  kind: ExpenseBeneficiaryKind
+  status: ExpenseBeneficiaryStatus
   description?: string
   createdAt: string
 }
@@ -160,6 +157,8 @@ export interface TransactionRevision {
     note?: string
     portfolioId?: string
     expenseCategoryId?: string
+    expenseNecessity?: ExpenseNecessity
+    expenseBeneficiaryId?: string
   }
 }
 
@@ -183,40 +182,15 @@ export interface LedgerTransaction {
   note?: string
   portfolioId?: string
   expenseCategoryId?: string
+  expenseNecessity?: ExpenseNecessity
+  expenseBeneficiaryId?: string
   cycleId?: string
   positionId?: string
 }
 
-export interface IncomeStream {
-  id: string
-  name: string
-  amountSar: number
-  dueDay: number
-  targetHoldingId: string
-  ownerId: string
-  status: IncomeStatus
-}
-
-export interface Liability {
-  id: string
-  name: string
-  ownerId: string
-  accountId?: string
-  amountSar: number
-  kind: 'credit_card' | 'loan' | 'other'
-  status: 'open' | 'closed'
-}
-
-export interface Claim {
-  id: string
-  creditorOwnerId: string
-  debtorPartyId: string
-  symbol: string
-  nativeUnit: string
-  quantity: number
-  unitValueSar: number
-  status: 'open' | 'settled'
-}
+export interface IncomeStream { id: string; name: string; amountSar: number; dueDay: number; targetHoldingId: string; ownerId: string; status: IncomeStatus }
+export interface Liability { id: string; name: string; ownerId: string; accountId?: string; amountSar: number; kind: 'credit_card' | 'loan' | 'other'; status: 'open' | 'closed' }
+export interface Claim { id: string; creditorOwnerId: string; debtorPartyId: string; symbol: string; nativeUnit: string; quantity: number; unitValueSar: number; status: 'open' | 'settled' }
 
 export interface FinanceState {
   schemaVersion: 4
@@ -227,6 +201,7 @@ export interface FinanceState {
   portfolios: Portfolio[]
   portfolioSlices: PortfolioSlice[]
   expenseCategories?: ExpenseCategory[]
+  expenseBeneficiaries?: ExpenseBeneficiary[]
   ledger: LedgerTransaction[]
   incomeStreams: IncomeStream[]
   liabilities: Liability[]

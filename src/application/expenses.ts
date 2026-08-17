@@ -1,5 +1,5 @@
 import { availableQuantity, ownerQuantity, round2 } from '../domain/finance'
-import type { ExpenseCategory, FinanceState, Holding, LedgerTransaction, Party } from '../domain/types'
+import type { ExpenseBeneficiary, ExpenseBeneficiaryKind, ExpenseCategory, ExpenseNecessity, FinanceState, Holding, LedgerTransaction, Party } from '../domain/types'
 
 const id = (prefix: string) => `${prefix}-${crypto.randomUUID()}`
 const now = () => new Date().toISOString()
@@ -7,23 +7,14 @@ const now = () => new Date().toISOString()
 function positive(value: number, label: string) {
   if (!Number.isFinite(value) || value <= 0) throw new Error(`${label} يجب أن يكون أكبر من صفر`)
 }
-
-function categories(state: FinanceState) {
-  return state.expenseCategories ?? []
-}
+function categories(state: FinanceState) { return state.expenseCategories ?? [] }
+function beneficiaries(state: FinanceState) { return state.expenseBeneficiaries ?? [] }
 
 function baseExpenseTx(title: string, amountSar: number, ownerId: string): LedgerTransaction {
-  return {
-    id: id('tx'), version: 1, status: 'posted', revisions: [], at: now(), kind: 'expense',
-    title, amountSar: round2(amountSar), ownerId,
-  }
+  return { id: id('tx'), version: 1, status: 'posted', revisions: [], at: now(), kind: 'expense', title, amountSar: round2(amountSar), ownerId }
 }
 
-export interface CreatePartyInput {
-  name: string
-  type: Party['type']
-}
-
+export interface CreatePartyInput { name: string; type: Party['type'] }
 export function createParty(state: FinanceState, input: CreatePartyInput): FinanceState {
   const name = input.name.trim()
   if (!name) throw new Error('اسم الجهة مطلوب')
@@ -36,6 +27,7 @@ export interface CreateExpenseCategoryInput {
   name: string
   parentId?: string
   description?: string
+  defaultNecessity?: ExpenseNecessity
 }
 
 export function createExpenseCategory(state: FinanceState, input: CreateExpenseCategoryInput): FinanceState {
@@ -49,7 +41,9 @@ export function createExpenseCategory(state: FinanceState, input: CreateExpenseC
   if (duplicate) throw new Error('يوجد بند بنفس الاسم تحت هذا المستوى')
   const category: ExpenseCategory = {
     id: id('cat'), name, parentId: input.parentId || undefined, status: 'active',
-    description: input.description?.trim() || undefined, createdAt: now(),
+    description: input.description?.trim() || undefined,
+    defaultNecessity: input.defaultNecessity,
+    createdAt: now(),
   }
   return { ...state, expenseCategories: [...categories(state), category] }
 }
@@ -66,11 +60,24 @@ function descendantsOf(state: FinanceState, categoryId: string): Set<string> {
   return result
 }
 
+export function expenseCategoryEffectiveNecessity(state: FinanceState, categoryId: string): ExpenseNecessity | undefined {
+  const all = categories(state)
+  let current = all.find(c => c.id === categoryId)
+  const seen = new Set<string>()
+  while (current && !seen.has(current.id)) {
+    seen.add(current.id)
+    if (current.defaultNecessity) return current.defaultNecessity
+    current = current.parentId ? all.find(c => c.id === current!.parentId) : undefined
+  }
+  return undefined
+}
+
 export interface UpdateExpenseCategoryInput {
   id: string
   name: string
   parentId?: string
   description?: string
+  defaultNecessity?: ExpenseNecessity
 }
 
 export function updateExpenseCategory(state: FinanceState, input: UpdateExpenseCategoryInput): FinanceState {
@@ -87,7 +94,11 @@ export function updateExpenseCategory(state: FinanceState, input: UpdateExpenseC
   if (duplicate) throw new Error('يوجد بند بنفس الاسم تحت هذا المستوى')
   return {
     ...state,
-    expenseCategories: all.map(c => c.id === input.id ? { ...c, name, parentId: input.parentId || undefined, description: input.description?.trim() || undefined } : c),
+    expenseCategories: all.map(c => c.id === input.id ? {
+      ...c, name, parentId: input.parentId || undefined,
+      description: input.description?.trim() || undefined,
+      defaultNecessity: input.defaultNecessity,
+    } : c),
   }
 }
 
@@ -97,6 +108,39 @@ export function archiveExpenseCategory(state: FinanceState, categoryId: string):
   if (!current) throw new Error('بند الصرف غير موجود')
   if (all.some(c => c.parentId === categoryId && c.status === 'active')) throw new Error('انقل أو أرشف الفروع التابعة أولًا')
   return { ...state, expenseCategories: all.map(c => c.id === categoryId ? { ...c, status: 'archived' } : c) }
+}
+
+export interface CreateExpenseBeneficiaryInput {
+  name: string
+  kind: ExpenseBeneficiaryKind
+  description?: string
+}
+export interface UpdateExpenseBeneficiaryInput extends CreateExpenseBeneficiaryInput { id: string }
+
+export function createExpenseBeneficiary(state: FinanceState, input: CreateExpenseBeneficiaryInput): FinanceState {
+  const name = input.name.trim()
+  if (!name) throw new Error('اسم المستفيد مطلوب')
+  if (beneficiaries(state).some(b => b.status === 'active' && b.name.trim().toLowerCase() === name.toLowerCase())) throw new Error('هذا المستفيد موجود بالفعل')
+  const beneficiary: ExpenseBeneficiary = {
+    id: id('beneficiary'), name, kind: input.kind, status: 'active',
+    description: input.description?.trim() || undefined, createdAt: now(),
+  }
+  return { ...state, expenseBeneficiaries: [...beneficiaries(state), beneficiary] }
+}
+
+export function updateExpenseBeneficiary(state: FinanceState, input: UpdateExpenseBeneficiaryInput): FinanceState {
+  const all = beneficiaries(state)
+  const current = all.find(b => b.id === input.id)
+  if (!current) throw new Error('المستفيد غير موجود')
+  const name = input.name.trim()
+  if (!name) throw new Error('اسم المستفيد مطلوب')
+  if (all.some(b => b.id !== input.id && b.status === 'active' && b.name.trim().toLowerCase() === name.toLowerCase())) throw new Error('يوجد مستفيد بنفس الاسم')
+  return { ...state, expenseBeneficiaries: all.map(b => b.id === input.id ? { ...b, name, kind: input.kind, description: input.description?.trim() || undefined } : b) }
+}
+
+export function archiveExpenseBeneficiary(state: FinanceState, beneficiaryId: string): FinanceState {
+  if (!beneficiaries(state).some(b => b.id === beneficiaryId)) throw new Error('المستفيد غير موجود')
+  return { ...state, expenseBeneficiaries: beneficiaries(state).map(b => b.id === beneficiaryId ? { ...b, status: 'archived' } : b) }
 }
 
 function reduceOwnerLots(holding: Holding, ownerId: string, quantity: number) {
@@ -127,12 +171,10 @@ function debitHolding(holding: Holding, ownerId: string, quantity: number): Hold
 }
 
 function portfolioAllocatedValueSar(state: FinanceState, portfolioId: string, ownerId: string): number {
-  return round2(state.portfolioSlices
-    .filter(s => s.portfolioId === portfolioId && s.ownerId === ownerId)
-    .reduce((sum, slice) => {
-      const holding = state.holdings.find(h => h.id === slice.holdingId && !h.archived)
-      return sum + (holding ? slice.quantity * holding.marketPriceSar : 0)
-    }, 0))
+  return round2(state.portfolioSlices.filter(s => s.portfolioId === portfolioId && s.ownerId === ownerId).reduce((sum, slice) => {
+    const holding = state.holdings.find(h => h.id === slice.holdingId && !h.archived)
+    return sum + (holding ? slice.quantity * holding.marketPriceSar : 0)
+  }, 0))
 }
 
 function consumePortfolioValue(state: FinanceState, portfolioId: string, ownerId: string, amountSar: number, preferredHoldingId: string): FinanceState {
@@ -165,11 +207,7 @@ function consumePortfolioValue(state: FinanceState, portfolioId: string, ownerId
     remainingSar -= usedQty * price
   }
   if (remainingSar > 0.05) throw new Error('تعذر استهلاك رصيد المحفظة بدقة؛ راجع تقييم الأصول المخصصة')
-
-  return {
-    ...state,
-    portfolioSlices: state.portfolioSlices.map(s => remainingBySlice.has(s.id) ? { ...s, quantity: Math.max(0, remainingBySlice.get(s.id) ?? 0) } : s).filter(s => s.quantity > 1e-9),
-  }
+  return { ...state, portfolioSlices: state.portfolioSlices.map(s => remainingBySlice.has(s.id) ? { ...s, quantity: Math.max(0, remainingBySlice.get(s.id) ?? 0) } : s).filter(s => s.quantity > 1e-9) }
 }
 
 export interface SpendExpenseInput {
@@ -178,6 +216,8 @@ export interface SpendExpenseInput {
   quantity: number
   expenseCategoryId: string
   portfolioId?: string
+  expenseNecessity?: ExpenseNecessity
+  expenseBeneficiaryId?: string
   title?: string
   note?: string
 }
@@ -186,6 +226,7 @@ export function spendExpense(state: FinanceState, input: SpendExpenseInput): Fin
   positive(input.quantity, 'قيمة/كمية الصرف')
   const category = categories(state).find(c => c.id === input.expenseCategoryId && c.status === 'active')
   if (!category) throw new Error('اختر بند صرف نشطًا')
+  if (input.expenseBeneficiaryId && !beneficiaries(state).some(b => b.id === input.expenseBeneficiaryId && b.status === 'active')) throw new Error('المستفيد غير موجود أو مؤرشف')
   const source = state.holdings.find(h => h.id === input.sourceHoldingId && !h.archived)
   if (!source) throw new Error('مصدر الدفع غير موجود')
   if (source.kind !== 'cash') throw new Error('المصروف النقدي يجب أن يخرج من رصيد نقد/عملة')
@@ -194,9 +235,7 @@ export function spendExpense(state: FinanceState, input: SpendExpenseInput): Fin
 
   let next = state
   if (input.portfolioId) {
-    const allocatedOnSourceToOtherPortfolios = state.portfolioSlices
-      .filter(s => s.holdingId === source.id && s.ownerId === input.ownerId && s.portfolioId !== input.portfolioId)
-      .reduce((sum, s) => sum + s.quantity, 0)
+    const allocatedOnSourceToOtherPortfolios = state.portfolioSlices.filter(s => s.holdingId === source.id && s.ownerId === input.ownerId && s.portfolioId !== input.portfolioId).reduce((sum, s) => sum + s.quantity, 0)
     const physicalSpendable = ownerQuantity(source, input.ownerId) - allocatedOnSourceToOtherPortfolios
     if (input.quantity > physicalSpendable + 1e-9) throw new Error('مصدر الدفع يحتوي قيمة محجوزة لمحافظ أخرى؛ اختر مصدرًا حرًا أو من نفس المحفظة')
     next = consumePortfolioValue(next, input.portfolioId, input.ownerId, amountSar, source.id)
@@ -207,21 +246,20 @@ export function spendExpense(state: FinanceState, input: SpendExpenseInput): Fin
 
   const debitedSource = debitHolding(source, input.ownerId, input.quantity)
   next = { ...next, holdings: next.holdings.map(h => h.id === source.id ? debitedSource : h) }
-  const tx = {
+  const tx: LedgerTransaction = {
     ...baseExpenseTx(input.title?.trim() || category.name, amountSar, input.ownerId),
     sourceHoldingId: source.id,
     sourceQuantity: input.quantity,
     portfolioId: input.portfolioId,
     expenseCategoryId: category.id,
+    expenseNecessity: input.expenseNecessity ?? expenseCategoryEffectiveNecessity(state, category.id),
+    expenseBeneficiaryId: input.expenseBeneficiaryId,
     note: input.note?.trim() || (input.portfolioId ? 'مصروف مرتبط بمحفظة: خرج فعليًا من الحساب واستهلك من التخصيص الاقتصادي للمحفظة.' : 'مصروف غير مرتبط بمحفظة: استُهلك من السيولة الحرة.'),
   }
   return { ...next, ledger: [tx, ...next.ledger] }
 }
 
-export function expenseCategorySubtreeIds(state: FinanceState, rootId: string): Set<string> {
-  return new Set([rootId, ...descendantsOf(state, rootId)])
-}
-
+export function expenseCategorySubtreeIds(state: FinanceState, rootId: string): Set<string> { return new Set([rootId, ...descendantsOf(state, rootId)]) }
 export function expenseCategorySpentSar(state: FinanceState, rootId: string): number {
   const ids = expenseCategorySubtreeIds(state, rootId)
   return round2(state.ledger.filter(tx => tx.kind === 'expense' && tx.expenseCategoryId && ids.has(tx.expenseCategoryId)).reduce((sum, tx) => sum + tx.amountSar, 0))
