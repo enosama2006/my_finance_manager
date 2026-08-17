@@ -22,6 +22,7 @@ import {
   type CreateExpenseBeneficiaryInput, type CreateExpenseCategoryInput, type CreatePartyInput, type SpendExpenseInput,
   type UpdateExpenseBeneficiaryInput, type UpdateExpenseCategoryInput,
 } from './expenses'
+import { reviseTransaction, type ReviseTransactionInput } from './transactionRevisions'
 
 interface FinanceContextValue {
   state: FinanceState
@@ -47,6 +48,7 @@ interface FinanceContextValue {
   updateExpenseBeneficiary: (input: UpdateExpenseBeneficiaryInput) => void
   archiveExpenseBeneficiary: (beneficiaryId: string) => void
   spendExpense: (input: SpendExpenseInput) => void
+  reviseTransaction: (input: ReviseTransactionInput) => void
   importSnapshot: (raw: string) => void
   runScenario: (id: ScenarioId) => void
   loadDemo: () => void
@@ -74,11 +76,7 @@ function materializeCategoryNecessity(categories: ExpenseCategory[]): ExpenseCat
   return categories.map(resolve)
 }
 
-/**
- * Compatibility migration for data created while Place was a mandatory UX layer.
- * It converts that presentation concept into user AccountGroups without touching
- * accounts, holdings, ownership, cost basis, portfolios, or ledger history.
- */
+/** Compatibility migration from the superseded mandatory Place UX. */
 function migrateLegacyPlacesToGroups(state: FinanceState): FinanceState {
   let accountGroups = [...(state.accountGroups ?? [])]
   let accounts = [...state.accounts]
@@ -139,6 +137,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     updateExpenseBeneficiary: (input) => persist(updateExpenseBeneficiary(state, input)),
     archiveExpenseBeneficiary: (beneficiaryId) => persist(archiveExpenseBeneficiary(state, beneficiaryId)),
     spendExpense: (input) => persist(spendExpense(state, input)),
+    reviseTransaction: (input) => persist(reviseTransaction(state, input)),
     importSnapshot: (raw) => persist(parseSnapshot(raw)),
     runScenario: (id) => persist(runScenario(state, id)),
     loadDemo: () => { repository.clear(); persist(seedState) },
