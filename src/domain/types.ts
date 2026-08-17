@@ -12,6 +12,7 @@ export type PerformanceRole = 'transactional_cash' | 'bridge' | 'investment' | '
 export type PositionStatus = 'open' | 'partially_disposed' | 'closed'
 export type CapitalCycleStatus = 'open' | 'partially_settled' | 'ready_to_close' | 'closed' | 'cancelled'
 export type CapitalCycleKind = 'investment_round' | 'commercial_operation' | 'commitment_period' | 'savings_period' | 'spending_period' | 'fixed_term_round'
+export type ExpenseCategoryStatus = 'active' | 'archived'
 
 export interface Party {
   id: string
@@ -92,6 +93,15 @@ export interface PortfolioSlice {
   quantity: number
 }
 
+export interface ExpenseCategory {
+  id: string
+  name: string
+  parentId?: string
+  status: ExpenseCategoryStatus
+  description?: string
+  createdAt: string
+}
+
 export interface Position {
   id: string
   name: string
@@ -147,6 +157,8 @@ export interface TransactionRevision {
     feesSar?: number
     realizedGainLossSar?: number | null
     note?: string
+    portfolioId?: string
+    expenseCategoryId?: string
   }
 }
 
@@ -169,6 +181,7 @@ export interface LedgerTransaction {
   realizedGainLossSar?: number | null
   note?: string
   portfolioId?: string
+  expenseCategoryId?: string
   cycleId?: string
   positionId?: string
 }
@@ -212,6 +225,7 @@ export interface FinanceState {
   holdings: Holding[]
   portfolios: Portfolio[]
   portfolioSlices: PortfolioSlice[]
+  expenseCategories?: ExpenseCategory[]
   ledger: LedgerTransaction[]
   incomeStreams: IncomeStream[]
   liabilities: Liability[]
