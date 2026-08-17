@@ -1,5 +1,5 @@
 import { Archive, ChevronLeft, FolderTree, Pencil, Plus } from 'lucide-react'
-import { useMemo, useState, type FormEvent } from 'react'
+import { useMemo, useState, type CSSProperties, type FormEvent } from 'react'
 import { useFinance } from '../application/store'
 import { expenseCategorySpentSar } from '../application/expenses'
 import type { ExpenseCategory } from '../domain/types'
@@ -104,7 +104,7 @@ function CategoryNode({ category, all, state, depth, onEdit, onArchive }: { cate
   const children = all.filter(c => c.parentId === category.id)
   const spent = expenseCategorySpentSar(state, category.id)
   return <div className="category-node-wrap">
-    <div className="category-node" style={{ '--tree-depth': depth } as React.CSSProperties}>
+    <div className="category-node" style={{ '--tree-depth': depth } as CSSProperties}>
       <div className="category-node-main"><span className="category-branch"><ChevronLeft size={14} /></span><div><strong>{category.name}</strong><span>{category.description || (children.length ? `${children.length} فروع` : 'بند نهائي')}</span></div></div>
       <div className="category-node-spend"><span>إجمالي الشجرة</span><strong>{money.format(spent)} ر.س</strong></div>
       <div className="category-node-actions"><button title="تعديل" onClick={() => onEdit(category)}><Pencil size={14} /></button><button title="أرشفة" onClick={() => onArchive(category)}><Archive size={14} /></button></div>
