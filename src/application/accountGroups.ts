@@ -1,5 +1,5 @@
 import { addAccount, type AddAccountInput } from './commands'
-import type { AccountGroup, FinanceState } from '../domain/types'
+import type { AccountGroup, AccountKind, FinanceState } from '../domain/types'
 
 const id = () => `ag-${crypto.randomUUID()}`
 const now = () => new Date().toISOString()
@@ -73,4 +73,42 @@ export function createGroupedAccount(state: FinanceState, input: CreateGroupedAc
   const next = addAccount(state, { ...input, custodianId: selfId })
   const created = next.accounts[next.accounts.length - 1]
   return input.groupId ? moveAccountToGroup(next, created.id, input.groupId) : next
+}
+
+export interface UpdateAccountInput {
+  id: string
+  name: string
+  kind: AccountKind
+  currency?: string
+  last4?: string
+  groupId?: string
+}
+
+/**
+ * Updates account metadata without changing financial history.
+ * Account id, holdings, ownership, cost basis and ledger remain untouched.
+ */
+export function updateAccount(state: FinanceState, input: UpdateAccountInput): FinanceState {
+  const account = state.accounts.find(a => a.id === input.id && a.status === 'active')
+  if (!account) throw new Error('الحساب غير موجود أو غير نشط')
+  const name = input.name.trim()
+  if (!name) throw new Error('اسم الحساب مطلوب')
+  if (input.groupId && !groups(state).some(g => g.id === input.groupId && g.status === 'active')) throw new Error('المجموعة غير موجودة أو مؤرشفة')
+
+  const last4 = input.last4?.trim() || undefined
+  if (last4 && !/^\d{1,4}$/.test(last4)) throw new Error('آخر 4 أرقام يجب أن تكون أرقامًا فقط')
+
+  const hasHoldings = state.holdings.some(h => h.accountId === account.id && !h.archived && h.quantity > 0)
+  const creditCardBoundaryChanged = (account.kind === 'credit_card') !== (input.kind === 'credit_card')
+  if (hasHoldings && creditCardBoundaryChanged) throw new Error('لا يمكن تحويل حساب عليه أرصدة إلى بطاقة ائتمان أو العكس؛ أنشئ حسابًا جديدًا بدلًا من تغيير دلالته المالية')
+
+  const updated = {
+    ...account,
+    name,
+    kind: input.kind,
+    currency: input.currency?.trim().toUpperCase() || undefined,
+    last4,
+    groupId: input.groupId || undefined,
+  }
+  return { ...state, accounts: state.accounts.map(a => a.id === account.id ? updated : a) }
 }
