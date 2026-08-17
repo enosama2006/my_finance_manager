@@ -69,8 +69,10 @@ IDs are never recycled after publication.
 
 ### Domain / Data
 - `domain/domain-model.md` — entities, relationships and invariants independent of UI/storage.
+- `domain/income-producing-assets-draft.md` — Draft extension for EconomicActivity/Venture, account-specific Portfolio funding reservations and income-producing Asset semantics discovered in SCN-002.
 - `data/database-model.md` — target relational model; not the current LocalStorage shape.
-- `calculations/calculation-rules.md` — formulas and financial semantics.
+- `calculations/calculation-rules.md` — core formulas and financial semantics.
+- `calculations/income-producing-asset-performance.md` — Draft formulas for Portfolio liquidity/capital/value and operating/capital performance of income-producing Assets.
 
 ### Behavior
 - `use-cases/action-contracts.md` — what every important button/action does in the application/domain/data layers.
@@ -78,6 +80,7 @@ IDs are never recycled after publication.
 
 ### Scenario laboratory
 - `scenarios/SCN-001-precious-metals-distributed-custody.md` — Gold/Silver split across Home, Al Rajhi and brother custody; tests Asset vs Holding vs Custody vs Portfolio and identifies a possible custody-independent Portfolio allocation refinement.
+- `scenarios/SCN-002-income-producing-assets-and-investment-portfolio.md` — five-bank cash Portfolio, existing/new vehicles, vehicle rental, apartment rental and agricultural land; tests capital acquisition, Portfolio funding rebalance, cost vs market value and asset/activity profitability.
 
 Scenarios are not merely examples. They are used to pressure-test the model. Each scenario should separate:
 - facts/requirements explicitly accepted by the user;

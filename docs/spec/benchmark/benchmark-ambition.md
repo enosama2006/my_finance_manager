@@ -107,17 +107,18 @@ Exact category trees are `TBD`.
 
 The product must be able to present a user's wealth even when it contains very different assets.
 
-User example started in this discussion:
+Example now expanded by SCN-002:
 
 ```text
 Assets
-├─ Cash / account balance: 1,000,000 SAR
-└─ Land / real estate
+├─ Cash distributed across several banks
+├─ Gold / Silver across custody locations
+├─ Vehicles
+├─ Apartment / property
+└─ Agricultural land
 ```
 
-This scenario is intentionally incomplete. The user will continue it to test how valuation, liquidity, profit/loss, portfolios and financial guidance should work across different asset classes.
-
-Do not infer the remaining scenario before it is provided.
+The product must preserve cost, current value, liquidity, location/custody and income-producing characteristics without forcing all Asset classes into the same simplistic behavior.
 
 ## BMK-008 — Benchmark against sound financial-management practice
 
@@ -182,3 +183,127 @@ We should use concrete scenarios supplied by the user to discover:
 7. differences between personal and micro-business use.
 
 Only after these mature should the clean rebuild implement the full benchmark target.
+
+## BMK-011 — Existing asset onboarding must not fabricate cash history
+
+When a user starts MyFinMan with Assets already owned before onboarding, the product must support an Opening Position with historical cost/current valuation without reducing current Cash Accounts.
+
+Examples:
+
+- existing rental car;
+- existing apartment;
+- existing agricultural land;
+- existing Gold/Silver.
+
+Historical acquisition facts and current state must be distinguishable from transactions that occur after MyFinMan starts tracking.
+
+## BMK-012 — New capital acquisition is not ordinary consumption expense
+
+Buying a durable Asset after onboarding should normally be represented as a capital transformation:
+
+```text
+Cash Asset ↓
+Durable/Investment Asset ↑
+```
+
+The Portfolio may change composition while invested capital remains represented.
+
+The product must not make an investment Portfolio appear to have "spent and lost" capital merely because Cash was converted into a Vehicle/Property/other Asset.
+
+Exact accounting treatment of ancillary costs remains subject to later approved policy.
+
+## BMK-013 — Portfolio cash and Portfolio total value are different metrics
+
+An investment Portfolio must expose separately:
+
+- remaining Cash / liquidity;
+- Asset composition;
+- invested capital / cost basis;
+- current market value;
+- income;
+- attributable expenses;
+- performance.
+
+Example:
+
+```text
+500,000 SAR cash Portfolio
+buy 150,000 Vehicle
+=> Cash may become 350,000
+=> Portfolio has not necessarily fallen to 350,000
+=> it now contains Cash + Vehicle
+```
+
+This distinction is mandatory for an investment-oriented product.
+
+## BMK-014 — Income-producing assets need operating economics
+
+A Vehicle, Apartment, Land or other Asset can generate recurring/seasonal revenue.
+
+The product should support per-Asset / per-Activity views of:
+
+- gross operating/rental revenue;
+- direct operating expenses;
+- net operating cash flow;
+- optional depreciation/economic wear;
+- operating profit where relevant;
+- unpaid/expected income where applicable.
+
+This operating result must remain separate from market valuation changes and disposal gains/losses.
+
+## BMK-015 — Profit must be decomposed, not overloaded
+
+MyFinMan must not show one ambiguous "profit" number for income-producing Assets.
+
+Target benchmark separates at least:
+
+```text
+Operating Result
+Capital / Valuation Result
+Realized Disposal Result
+Total / Lifecycle Economic Return
+```
+
+Exact performance formulas and annualization remain `TBD`, but the semantic separation is required.
+
+## BMK-016 — Activity/Venture reporting bridges personal and micro-business finance
+
+SCN-002 suggests a future `EconomicActivity/Venture` dimension to group revenue/cost-generating operations independently of Asset, Portfolio, Account and Category.
+
+Examples:
+
+- Car Rental;
+- Apartment Rental;
+- Agricultural Operation;
+- future small commercial activity.
+
+Target capability:
+
+```text
+Transaction
+├─ Category
+├─ Activity/Venture
+├─ Asset
+├─ Portfolio
+├─ Account
+└─ Counterparty
+```
+
+These are dimensions of one financial event, not duplicate transactions.
+
+Architecture status: **Draft; requires more scenarios before formal Domain approval.**
+
+## BMK-017 — Borrow useful SME accounting concepts without becoming heavyweight accounting software
+
+MyFinMan should use established financial/accounting practice as a benchmark for semantic correctness while keeping the UX owner-oriented and simpler than statutory accounting systems.
+
+Useful reference areas include:
+
+- tangible assets held for rental, cost and depreciation concepts;
+- investment property held for rent/appreciation;
+- revenue versus asset valuation;
+- cash-flow and liquidity visibility;
+- agricultural activity distinct from the land itself;
+- SME-oriented simplified reporting principles.
+
+The product should be able to offer a simple personal mode and progressively richer micro-business reporting without forcing formal statutory accounting complexity on every user.
