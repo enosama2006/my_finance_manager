@@ -1,6 +1,6 @@
 import { Building2, FolderTree, ReceiptText, SlidersHorizontal } from 'lucide-react'
 import { useState } from 'react'
-import { Operations } from './Operations'
+import { OperationsV2 } from './OperationsV2'
 import { ExpenseCategories } from './ExpenseCategories'
 import { SpendExpense } from './SpendExpense'
 import { Parties } from './Parties'
@@ -11,7 +11,7 @@ const tabs: { id: Tab; label: string; sub: string; icon: typeof SlidersHorizonta
   { id: 'general', label: 'العمليات العامة', sub: 'حسابات، أرصدة، أصول، محافظ', icon: SlidersHorizontal },
   { id: 'expense', label: 'تسجيل مصروف', sub: 'بند + حساب + محفظة اختيارية', icon: ReceiptText },
   { id: 'categories', label: 'بنود الصرف', sub: 'إدارة شجرية للتصنيفات', icon: FolderTree },
-  { id: 'parties', label: 'الجهات والبنوك', sub: 'بنوك، منصات، أشخاص', icon: Building2 },
+  { id: 'parties', label: 'الأماكن والجهات', sub: 'بنك، منزل، منصة، مكان', icon: Building2 },
 ]
 
 export function OperationsHub({ goTrade }: { goTrade: () => void }) {
@@ -20,7 +20,7 @@ export function OperationsHub({ goTrade }: { goTrade: () => void }) {
     <section className="operations-tabs" aria-label="أنواع العمليات">
       {tabs.map(item => { const Icon = item.icon; return <button key={item.id} className={tab === item.id ? 'operations-tab active' : 'operations-tab'} onClick={() => setTab(item.id)}><Icon size={18} /><span><strong>{item.label}</strong><small>{item.sub}</small></span></button> })}
     </section>
-    {tab === 'general' && <Operations goTrade={goTrade} />}
+    {tab === 'general' && <OperationsV2 goTrade={goTrade} />}
     {tab === 'expense' && <SpendExpense />}
     {tab === 'categories' && <ExpenseCategories />}
     {tab === 'parties' && <Parties />}

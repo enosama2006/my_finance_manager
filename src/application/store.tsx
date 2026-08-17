@@ -1,26 +1,27 @@
 import { createContext, useContext, useMemo, useState, type ReactNode } from 'react'
-import { applyConversion } from '../domain/finance'
 import type { ConversionInput, FinanceState } from '../domain/types'
+import type { MarketQuote } from '../data/marketData'
+import { parseSnapshot } from '../data/snapshot'
 import { seedState } from '../data/seed'
 import { emptyState } from '../data/emptyState'
 import { createLocalStorageFinanceRepository } from '../data/localStorageRepository'
 import { runScenario, type ScenarioId } from './scenarios'
+import { applyManagedConversion } from './conversionPolicy'
 import {
   addAccount,
   addExistingAsset,
   addFunds,
   allocateToPortfolio,
   createPortfolio,
-  purchaseAsset,
   transferFunds,
   type AddAccountInput,
   type AddFundsInput,
   type AllocateToPortfolioInput,
   type CreatePortfolioInput,
   type ExistingAssetInput,
-  type PurchaseAssetInput,
   type TransferFundsInput,
 } from './commands'
+import { applyHoldingMarketQuote, purchaseAssetSimplified, type SimplifiedPurchaseInput } from './purchase'
 import {
   archiveExpenseCategory,
   createExpenseCategory,
@@ -39,15 +40,17 @@ interface FinanceContextValue {
   addAccount: (input: AddAccountInput) => void
   addFunds: (input: AddFundsInput) => void
   addExistingAsset: (input: ExistingAssetInput) => void
-  purchaseAsset: (input: PurchaseAssetInput) => void
+  purchaseAsset: (input: SimplifiedPurchaseInput) => void
   transferFunds: (input: TransferFundsInput) => void
   createPortfolio: (input: CreatePortfolioInput) => void
   allocateToPortfolio: (input: AllocateToPortfolioInput) => void
+  updateHoldingQuote: (holdingId: string, quote: MarketQuote) => void
   createParty: (input: CreatePartyInput) => void
   createExpenseCategory: (input: CreateExpenseCategoryInput) => void
   updateExpenseCategory: (input: UpdateExpenseCategoryInput) => void
   archiveExpenseCategory: (categoryId: string) => void
   spendExpense: (input: SpendExpenseInput) => void
+  importSnapshot: (raw: string) => void
   runScenario: (id: ScenarioId) => void
   loadDemo: () => void
   reset: () => void
@@ -80,19 +83,21 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
 
   const value = useMemo<FinanceContextValue>(() => ({
     state,
-    convert: (input) => persist(applyConversion(state, input)),
+    convert: (input) => persist(applyManagedConversion(state, input)),
     addAccount: (input) => persist(addAccount(state, input)),
     addFunds: (input) => persist(addFunds(state, input)),
     addExistingAsset: (input) => persist(addExistingAsset(state, input)),
-    purchaseAsset: (input) => persist(purchaseAsset(state, input)),
+    purchaseAsset: (input) => persist(purchaseAssetSimplified(state, input)),
     transferFunds: (input) => persist(transferFunds(state, input)),
     createPortfolio: (input) => persist(createPortfolio(state, input)),
     allocateToPortfolio: (input) => persist(allocateToPortfolio(state, input)),
+    updateHoldingQuote: (holdingId, quote) => persist(applyHoldingMarketQuote(state, holdingId, quote)),
     createParty: (input) => persist(createParty(state, input)),
     createExpenseCategory: (input) => persist(createExpenseCategory(state, input)),
     updateExpenseCategory: (input) => persist(updateExpenseCategory(state, input)),
     archiveExpenseCategory: (categoryId) => persist(archiveExpenseCategory(state, categoryId)),
     spendExpense: (input) => persist(spendExpense(state, input)),
+    importSnapshot: (raw) => persist(parseSnapshot(raw)),
     runScenario: (id) => persist(runScenario(state, id)),
     loadDemo: () => {
       repository.clear()

@@ -2,14 +2,16 @@ import React from 'react'
 import ReactDOM from 'react-dom/client'
 import App from './App'
 import { FinanceProvider } from './application/store'
+import { ToastProvider } from './components/ToastProvider'
 import './styles.css'
 import './foundation-v4.css'
 import './responsive.css'
 import './operations.css'
 import './expense.css'
+import './ux-upgrades.css'
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
-    <FinanceProvider><App /></FinanceProvider>
+    <ToastProvider><FinanceProvider><App /></FinanceProvider></ToastProvider>
   </React.StrictMode>,
 )
