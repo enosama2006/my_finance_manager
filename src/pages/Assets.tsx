@@ -1,4 +1,4 @@
-import { ChevronDown, ChevronLeft, Landmark, MapPin, UserRoundCheck } from 'lucide-react'
+import { ChevronDown, ChevronLeft, Landmark, MapPin, UserRoundCheck, WalletCards } from 'lucide-react'
 import { useMemo, useState } from 'react'
 import { useFinance } from '../application/store'
 import { assetGroupOf, holdingValueSar, ownerHoldingValueSar, ownerQuantity, ownerWeightedAverageCostSar } from '../domain/finance'
@@ -16,6 +16,7 @@ export function Assets() {
 
   const groups = useMemo(() => {
     const map = new Map<string, Holding[]>()
+    if (lens === 'account') state.accounts.filter(a => a.status === 'active').forEach(account => map.set(account.name, []))
     state.holdings.filter(h => !h.archived && h.quantity > 0).forEach(h => {
       const keys = lens === 'owner'
         ? h.ownership.filter(s => s.quantity > 0).map(s => state.parties.find(p => p.id === s.ownerId)?.name ?? s.ownerId)
@@ -26,8 +27,8 @@ export function Assets() {
   }, [state, lens])
 
   return <div className="page-stack">
-    <section className="section-intro"><div><span className="eyebrow">ASSET ≠ ACCOUNT / COST ≠ VALUE</span><h2>الأصول والحسابات</h2><p>الحساب يجيب «أين؟»، والأصل «ماذا وكم؟». أضفنا الآن Cost Basis ودور المركز حتى ترى الفرق بين تكلفة الاقتناء والقيمة الحالية دون خلطهما.</p></div><div className="segmented"><button className={lens === 'owner' ? 'active' : ''} onClick={() => setLens('owner')}>المالك</button><button className={lens === 'group' ? 'active' : ''} onClick={() => setLens('group')}>التصنيف</button><button className={lens === 'account' ? 'active' : ''} onClick={() => setLens('account')}>الحساب</button></div></section>
-    <section className="tree-panel">{groups.map(([group, holdings]) => { const isOpen = expanded === group; const value = holdings.reduce((sum, h) => { if (lens === 'owner') { const party = state.parties.find(p => p.name === group); return sum + (party ? ownerHoldingValueSar(h, party.id) : 0) } return sum + holdingValueSar(h) }, 0); return <div className="tree-group" key={group}><button className="tree-header" onClick={() => setExpanded(isOpen ? null : group)}><div className="tree-title"><div className="tree-avatar">{lens === 'account' ? <Landmark size={19} /> : <UserRoundCheck size={19} />}</div><div><strong>{group}</strong><span>{holdings.length} حيازات</span></div></div><div className="tree-summary"><strong>{money.format(value)} ر.س</strong>{isOpen ? <ChevronDown /> : <ChevronLeft />}</div></button>{isOpen && <div className="tree-children">{lens === 'owner' ? renderOwnerAssetTree(group, holdings) : holdings.map(h => <HoldingCard key={`${group}-${h.id}`} h={h} />)}</div>}</div> })}</section>
+    <section className="section-intro"><div><span className="eyebrow">ASSET ≠ ACCOUNT / COST ≠ VALUE</span><h2>الأصول والحسابات</h2><p>الحساب يجيب «أين؟»، والأصل «ماذا وكم؟». يمكن أن يوجد حساب برصيد صفر؛ القيمة المالية تأتي فقط من الـHoldings داخله.</p></div><div className="segmented"><button className={lens === 'owner' ? 'active' : ''} onClick={() => setLens('owner')}>المالك</button><button className={lens === 'group' ? 'active' : ''} onClick={() => setLens('group')}>التصنيف</button><button className={lens === 'account' ? 'active' : ''} onClick={() => setLens('account')}>الحساب</button></div></section>
+    {groups.length === 0 ? <section className="tree-panel"><div className="empty-preview"><WalletCards /><strong>{lens === 'account' ? 'لا توجد حسابات بعد' : 'لا توجد أصول أو أرصدة بعد'}</strong><span>{lens === 'account' ? 'أضف بنكًا/جهة ثم أنشئ حسابك الأول من العمليات المالية.' : 'بعد إنشاء الحساب أضف رصيدًا افتتاحيًا أو أصلًا قائمًا أو نفّذ شراء أصل.'}</span></div></section> : <section className="tree-panel">{groups.map(([group, holdings]) => { const isOpen = expanded === group; const value = holdings.reduce((sum, h) => { if (lens === 'owner') { const party = state.parties.find(p => p.name === group); return sum + (party ? ownerHoldingValueSar(h, party.id) : 0) } return sum + holdingValueSar(h) }, 0); return <div className="tree-group" key={group}><button className="tree-header" onClick={() => setExpanded(isOpen ? null : group)}><div className="tree-title"><div className="tree-avatar">{lens === 'account' ? <Landmark size={19} /> : <UserRoundCheck size={19} />}</div><div><strong>{group}</strong><span>{holdings.length ? `${holdings.length} حيازات` : 'حساب بلا رصيد'}</span></div></div><div className="tree-summary"><strong>{money.format(value)} ر.س</strong>{isOpen ? <ChevronDown /> : <ChevronLeft />}</div></button>{isOpen && <div className="tree-children">{holdings.length === 0 ? <div className="empty-preview"><Landmark /><strong>الرصيد صفر</strong><span>الحساب موجود كحاوية فقط. أضف له رصيدًا عندما تريد.</span></div> : lens === 'owner' ? renderOwnerAssetTree(group, holdings) : holdings.map(h => <HoldingCard key={`${group}-${h.id}`} h={h} />)}</div>}</div> })}</section>}
   </div>
 
   function renderOwnerAssetTree(ownerName: string, holdings: Holding[]) {
