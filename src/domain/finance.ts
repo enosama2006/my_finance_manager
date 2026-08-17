@@ -1,3 +1,4 @@
+import { holdingUnitValueSar } from './currencies'
 import type { AssetGroup, AssetKind, ConversionInput, CostBasisLot, FinanceState, Holding, LedgerTransaction, Portfolio } from './types'
 
 export const round2 = (value: number) => Math.round((value + Number.EPSILON) * 100) / 100
@@ -10,7 +11,7 @@ export function assetGroupOf(kind: AssetKind): AssetGroup {
 }
 
 export function holdingValueSar(holding: Holding): number {
-  return round2(holding.quantity * holding.marketPriceSar)
+  return round2(holding.quantity * holdingUnitValueSar(holding))
 }
 
 export function ownerQuantity(holding: Holding, ownerId: string): number {
@@ -18,7 +19,7 @@ export function ownerQuantity(holding: Holding, ownerId: string): number {
 }
 
 export function ownerHoldingValueSar(holding: Holding, ownerId: string): number {
-  return round2(ownerQuantity(holding, ownerId) * holding.marketPriceSar)
+  return round2(ownerQuantity(holding, ownerId) * holdingUnitValueSar(holding))
 }
 
 export function externalLiabilitiesByOwner(state: FinanceState, ownerId: string): number {
@@ -43,12 +44,12 @@ export function availableQuantity(state: FinanceState, holdingId: string, ownerI
 export function totalAllocatedByOwner(state: FinanceState, ownerId: string): number {
   return round2(state.portfolioSlices.filter((s) => s.ownerId === ownerId).reduce((sum, slice) => {
     const holding = state.holdings.find((h) => h.id === slice.holdingId)
-    return sum + (holding ? slice.quantity * holding.marketPriceSar : 0)
+    return sum + (holding ? slice.quantity * holdingUnitValueSar(holding) : 0)
   }, 0))
 }
 
 export function availableByOwner(state: FinanceState, ownerId: string): number {
-  return round2(state.holdings.reduce((sum, holding) => sum + availableQuantity(state, holding.id, ownerId) * holding.marketPriceSar, 0))
+  return round2(state.holdings.reduce((sum, holding) => sum + availableQuantity(state, holding.id, ownerId) * holdingUnitValueSar(holding), 0))
 }
 
 export function realizedProfitByOwner(state: FinanceState, ownerId: string): number {
@@ -68,7 +69,7 @@ export function accountValueSar(state: FinanceState, accountId: string): number 
 export function portfolioDirectValueSar(state: FinanceState, portfolioId: string): number {
   return round2(state.portfolioSlices.filter((s) => s.portfolioId === portfolioId).reduce((sum, slice) => {
     const holding = state.holdings.find((h) => h.id === slice.holdingId)
-    return sum + (holding ? slice.quantity * holding.marketPriceSar : 0)
+    return sum + (holding ? slice.quantity * holdingUnitValueSar(holding) : 0)
   }, 0))
 }
 
