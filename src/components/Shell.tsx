@@ -16,6 +16,9 @@ const items: { id: PageKey; label: string; short: string; icon: typeof Gauge; mo
 export function Shell({ page, onPage, onReset, children }: { page: PageKey; onPage: (p: PageKey) => void; onReset: () => void; children: ReactNode }) {
   const current = items.find((x) => x.id === page)
   const mobileItems = items.filter(x => x.mobile)
+  const reset = () => {
+    if (window.confirm('سيتم مسح جميع البيانات التي أدخلتها في هذه النسخة والعودة إلى تطبيق فارغ. هل تريد المتابعة؟')) onReset()
+  }
   return <div className="app-stage"><div className="app-shell">
     <aside className="side-nav" aria-label="التنقل الرئيسي">
       <button className="side-brand" onClick={() => onPage('dashboard')}><span className="brand-mark"><CircleDollarSign size={23} /></span><span><b>MyFinMan</b><small>Personal Finance OS</small></span></button>
@@ -31,7 +34,7 @@ export function Shell({ page, onPage, onReset, children }: { page: PageKey; onPa
         <div className="header-context"><span className="eyebrow">MYFINMAN / OPERATING FOUNDATION</span><strong>{current?.label}</strong></div>
         <div className="header-actions">
           {page !== 'operations' && <button className="quick-action-button" onClick={() => onPage('operations')}><CirclePlus size={17} /><span>عملية جديدة</span></button>}
-          <button className="icon-button" onClick={onReset} aria-label="إعادة البيانات التجريبية" title="إعادة البيانات التجريبية"><RotateCcw size={18} /></button>
+          <button className="icon-button" onClick={reset} aria-label="مسح البيانات والبدء من جديد" title="مسح البيانات والبدء من جديد"><RotateCcw size={18} /></button>
         </div>
       </header>
       <main className="main-area"><div className="content">{children}</div></main>
