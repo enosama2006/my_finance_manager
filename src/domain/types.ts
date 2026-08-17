@@ -2,6 +2,7 @@ export type AssetKind = 'cash' | 'metal' | 'collectible' | 'fund' | 'stock' | 'c
 export type AssetGroup = 'cash_and_equivalents' | 'investments' | 'real_estate' | 'other'
 export type AccountKind = 'checking' | 'saving' | 'investment' | 'cash_container' | 'prepaid' | 'custody' | 'fixed_term' | 'credit_card'
 export type AccountStatus = 'active' | 'closed' | 'archived'
+export type AccountGroupStatus = 'active' | 'archived'
 export type PortfolioStatus = 'active' | 'closed' | 'archived'
 export type PortfolioProfile = 'spending_budget' | 'commitment' | 'savings_goal' | 'reserve' | 'investment' | 'deal'
 export type TransactionStatus = 'draft' | 'posted'
@@ -23,10 +24,29 @@ export interface Party {
   type: 'person' | 'bank' | 'broker' | 'institution' | 'home' | 'place' | 'self'
 }
 
+/**
+ * User-defined organizational folder above accounts.
+ * It has no balance, ownership, custody, portfolio meaning, or ledger effect.
+ */
+export interface AccountGroup {
+  id: string
+  name: string
+  parentId?: string
+  status: AccountGroupStatus
+  description?: string
+  createdAt: string
+}
+
+/**
+ * Account is the real container that holds Holdings.
+ * groupId is presentation organization only. custodianId is retained for
+ * backward compatibility with older prototype data and is not a required UX layer.
+ */
 export interface Account {
   id: string
   name: string
   kind: AccountKind
+  groupId?: string
   custodianId: string
   institutionId?: string
   currency?: string
@@ -196,6 +216,7 @@ export interface FinanceState {
   schemaVersion: 4
   costBasisMethod: 'weighted_average'
   parties: Party[]
+  accountGroups?: AccountGroup[]
   accounts: Account[]
   holdings: Holding[]
   portfolios: Portfolio[]
