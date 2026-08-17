@@ -1,19 +1,19 @@
-import { Building2, FolderTree, ReceiptText, SlidersHorizontal, UsersRound } from 'lucide-react'
+import { FolderTree, ReceiptText, SlidersHorizontal, UsersRound, WalletCards } from 'lucide-react'
 import { useState } from 'react'
 import { OperationsV2 } from './OperationsV2'
 import { ExpenseCategories } from './ExpenseCategories'
 import { ExpenseBeneficiaries } from './ExpenseBeneficiaries'
 import { SpendExpense } from './SpendExpense'
-import { Parties } from './Parties'
+import { AccountGroups } from './AccountGroups'
 
-type Tab = 'general' | 'expense' | 'categories' | 'beneficiaries' | 'parties'
+type Tab = 'general' | 'expense' | 'categories' | 'beneficiaries' | 'groups'
 
 const tabs: { id: Tab; label: string; sub: string; icon: typeof SlidersHorizontal }[] = [
   { id: 'general', label: 'العمليات العامة', sub: 'حسابات، أرصدة، أصول، محافظ', icon: SlidersHorizontal },
   { id: 'expense', label: 'تسجيل مصروف', sub: 'بند + مستفيد + حساب + محفظة', icon: ReceiptText },
   { id: 'categories', label: 'بنود الصرف', sub: 'شجرة + درجة ضرورة', icon: FolderTree },
   { id: 'beneficiaries', label: 'المستفيدون', sub: 'أنا، أفراد، عائلة، أطفال', icon: UsersRound },
-  { id: 'parties', label: 'الأماكن والجهات', sub: 'بنك، منزل، منصة، مكان', icon: Building2 },
+  { id: 'groups', label: 'مجموعات الحسابات', sub: 'تنظيم حر للحسابات', icon: WalletCards },
 ]
 
 export function OperationsHub({ goTrade }: { goTrade: () => void }) {
@@ -26,6 +26,6 @@ export function OperationsHub({ goTrade }: { goTrade: () => void }) {
     {tab === 'expense' && <SpendExpense/>}
     {tab === 'categories' && <ExpenseCategories/>}
     {tab === 'beneficiaries' && <ExpenseBeneficiaries/>}
-    {tab === 'parties' && <Parties/>}
+    {tab === 'groups' && <AccountGroups/>}
   </div>
 }
