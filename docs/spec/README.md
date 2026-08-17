@@ -81,6 +81,7 @@ IDs are never recycled after publication.
 ### Scenario laboratory
 - `scenarios/SCN-001-precious-metals-distributed-custody.md` — Gold/Silver split across Home, Al Rajhi and brother custody; tests Asset vs Holding vs Custody vs Portfolio and identifies a possible custody-independent Portfolio allocation refinement.
 - `scenarios/SCN-002-income-producing-assets-and-investment-portfolio.md` — five-bank cash Portfolio, existing/new vehicles, vehicle rental, apartment rental and agricultural land; tests capital acquisition, Portfolio funding rebalance, cost vs market value and asset/activity profitability.
+- `scenarios/SCN-003-child-cash-custody-and-ownership-substitution.md` — Eid cash owned by children but held by Father; tests owner-vs-custody, owner-scoped Free Liquidity, internal Claim/Liability when another owner's cash is consumed, and a Draft same-asset ownership-substitution operation that replaces old fake bank transfers.
 
 Scenarios are not merely examples. They are used to pressure-test the model. Each scenario should separate:
 - facts/requirements explicitly accepted by the user;
