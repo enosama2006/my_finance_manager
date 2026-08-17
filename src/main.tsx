@@ -6,6 +6,7 @@ import './styles.css'
 import './foundation-v4.css'
 import './responsive.css'
 import './operations.css'
+import './expense.css'
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
