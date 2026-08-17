@@ -31,15 +31,11 @@ function snapshot(tx: LedgerTransaction): TransactionRevision['snapshot'] {
     expenseCategoryId: tx.expenseCategoryId,
     expenseNecessity: tx.expenseNecessity,
     expenseBeneficiaryId: tx.expenseBeneficiaryId,
+    userInput: tx.userInput,
   }
 }
 
-/**
- * Safe revision for fields that do not alter the posted economic effects.
- * Amount/source/target/portfolio/cost-basis corrections are intentionally not
- * accepted here because schema-v4 does not yet retain enough projection detail
- * to reverse and replay every dependent effect losslessly.
- */
+/** Safe revision for fields that do not alter the posted economic effects. */
 export function reviseTransaction(state: FinanceState, input: ReviseTransactionInput): FinanceState {
   const current = state.ledger.find(tx => tx.id === input.transactionId)
   if (!current) throw new Error('الحركة غير موجودة')
