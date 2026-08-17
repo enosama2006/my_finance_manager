@@ -25,18 +25,18 @@ export const currencyCatalog: CurrencyDefinition[] = [
 
 export const reportingCurrencyCatalog = currencyCatalog.filter(currency => currency.referenceSar != null)
 
-export function normalizeCurrencyCode(value: string | undefined): string | undefined {
+export function normalizeCurrencyCode(value: string | null | undefined): string | undefined {
   if (!value) return undefined
   const ascii = [...value.toUpperCase()].filter(ch => ch >= 'A' && ch <= 'Z').join('')
   return ascii || value.trim().toUpperCase()
 }
 
-export function currencyByCode(code: string | undefined): CurrencyDefinition | undefined {
+export function currencyByCode(code: string | null | undefined): CurrencyDefinition | undefined {
   const normalized = normalizeCurrencyCode(code)
   return currencyCatalog.find(currency => currency.code === normalized)
 }
 
-export function currencyReferenceRateSar(code: string | undefined): number | null {
+export function currencyReferenceRateSar(code: string | null | undefined): number | null {
   return currencyByCode(code)?.referenceSar ?? null
 }
 
