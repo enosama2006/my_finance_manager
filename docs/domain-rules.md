@@ -10,6 +10,23 @@
 - المتوقع والمسودة والخطة لا تغير الواقع المالي.
 - Opening صريح ولا يخترع حركة تاريخية.
 
+## Cash is an asset; Account is a container
+- `Cash` أصل مالي عالي السيولة، وليس اسمًا للحساب.
+- حساب بنكي جاري/توفير هو `Account/Container`؛ الرصيد داخله `Holding(kind=cash)`.
+- خزنة المنزل هي `Account(kind=cash_container)`؛ النقد الموجود فيها Holding مستقل.
+- العملة تحددها `symbol/nativeUnit` مثل `SAR` و`USD`، وليس `AssetKind=currency` منفصلًا.
+- أرصدة SAR البنكية، SAR النقدية الفعلية، وUSD النقدية كلها Holdings من نوع `cash` ويمكن أن توجد في Containers مختلفة.
+- لا يدخل Account نفسه في Net Worth فوق قيمة Holdings داخله؛ الحساب ليس أصلًا ثانيًا.
+- نقل نفس النقد بين حسابين = `Real Transfer` ولا ينشئ Realized P/L.
+- `USD → SAR` = Conversion بين أصلين نقديين مختلفي العملة ويمكن أن ينشئ Realized P/L حسب Cost Basis.
+
+## Asset taxonomy
+- `cash` → Cash & Cash Equivalents.
+- `fund / stock / metal / crypto / fixed_term` → Investments.
+- `real_estate` → Real Estate.
+- `collectible / receivable / other` → Other Assets.
+- Asset Class لا يساوي Portfolio.
+
 ## Accounts and custody
 - الحسابات تماثل الواقع وتملك Stable IDs وحالة active/closed/archived.
 - Debit وسيلة وصول، Prepaid وعاء إن حمل رصيدًا، Credit Card التزام.
@@ -17,7 +34,6 @@
 - إغلاق الحساب/البطاقة لا يحذف التاريخ.
 
 ## Assets, ownership and portfolios
-- Asset Class لا يساوي Portfolio.
 - Portfolio والمخصص كيان واحد شجري.
 - Portfolio قد تمتد عبر عدة Accounts/Assets والعكس.
 - Available = حصة Holding غير المقيدة بمحفظة.
@@ -30,6 +46,7 @@
 - مجموع Ownership Shares يساوي كمية Holding.
 - Portfolio Slices لا تتجاوز ملكية Owner في Holding.
 - Current Value يظهر معه valuation method/source/time.
+- Cash بالعملة المرجعية يستخدم nominal valuation؛ Cash بعملة أجنبية يستخدم FX valuation.
 - Market/FX/manual valuation لا ينشئ Transaction أو Income.
 - Unknown cost يدخل في Current Wealth ويُستبعد من return-on-cost.
 

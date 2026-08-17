@@ -1,6 +1,13 @@
-import type { ConversionInput, CostBasisLot, FinanceState, Holding, LedgerTransaction, Portfolio } from './types'
+import type { AssetGroup, AssetKind, ConversionInput, CostBasisLot, FinanceState, Holding, LedgerTransaction, Portfolio } from './types'
 
 export const round2 = (value: number) => Math.round((value + Number.EPSILON) * 100) / 100
+
+export function assetGroupOf(kind: AssetKind): AssetGroup {
+  if (kind === 'cash') return 'cash_and_equivalents'
+  if (kind === 'fund' || kind === 'stock' || kind === 'metal' || kind === 'crypto' || kind === 'fixed_term') return 'investments'
+  if (kind === 'real_estate') return 'real_estate'
+  return 'other'
+}
 
 export function holdingValueSar(holding: Holding): number {
   return round2(holding.quantity * holding.marketPriceSar)
@@ -156,7 +163,7 @@ export function applyConversion(state: FinanceState, input: ConversionInput, now
     quantity: input.targetQuantity,
     marketPriceSar: input.targetUnitValueSarAtExecution,
     costLots: [{ id: `lot-${crypto.randomUUID()}`, ownerId: input.ownerId, quantity: input.targetQuantity, unitCostSar: round2((preview.proceedsSar + preview.feesSar) / input.targetQuantity), acquiredAt: now }],
-    valuationMethod: input.targetSymbol === 'SAR' ? 'nominal' : 'market_quote',
+    valuationMethod: input.targetKind === 'cash' ? (input.targetSymbol === 'SAR' ? 'nominal' : 'fx') : 'market_quote',
     valuationSource: 'execution',
     valuedAt: now,
     accountId: input.targetAccountId,

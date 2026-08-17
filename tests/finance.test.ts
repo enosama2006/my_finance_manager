@@ -1,14 +1,36 @@
 import { describe, expect, it } from 'vitest'
-import { accountValueSar, applyConversion, assertCostBasisCoverageInvariant, assertPhysicalQuantityInvariant, assertPortfolioAllocationInvariant, availableByOwner, netWorthByOwner, ownerWeightedAverageCostSar, portfolioRollupValueSar, previewConversion, updateValuation } from '../src/domain/finance'
+import { accountValueSar, applyConversion, assetGroupOf, assertCostBasisCoverageInvariant, assertPhysicalQuantityInvariant, assertPortfolioAllocationInvariant, availableByOwner, netWorthByOwner, ownerWeightedAverageCostSar, portfolioRollupValueSar, previewConversion, updateValuation } from '../src/domain/finance'
 import { seedState, SELF_ID } from '../src/data/seed'
 
 const baseConversion = {
-  sourceHoldingId: 'h-usd', targetSymbol: 'SAR', targetName: 'ريال سعودي', targetKind: 'currency' as const, targetUnit: 'ر.س',
+  sourceHoldingId: 'h-usd', targetSymbol: 'SAR', targetName: 'ريال سعودي', targetKind: 'cash' as const, targetUnit: 'ر.س',
   sourceQuantity: 1000, targetQuantity: 3800, targetUnitValueSarAtExecution: 1, feesSar: 10, ownerId: SELF_ID,
   targetAccountId: 'acc-alrajhi', targetCustodianId: 'party-alrajhi', targetLocation: 'جاري الراجحي',
 }
 
 describe('MyFinMan Foundation V4 invariants', () => {
+  it('bank account is a container while the balance inside it is a cash asset', () => {
+    const account = seedState.accounts.find(a => a.id === 'acc-alrajhi')!
+    const holding = seedState.holdings.find(h => h.id === 'h-alrajhi-sar')!
+    expect(account.kind).toBe('checking')
+    expect(holding.accountId).toBe(account.id)
+    expect(holding.kind).toBe('cash')
+    expect(holding.symbol).toBe('SAR')
+  })
+  it('home vault is a cash container that can hold several cash currencies and other assets', () => {
+    const vault = seedState.accounts.find(a => a.id === 'acc-vault')!
+    const contents = seedState.holdings.filter(h => h.accountId === vault.id)
+    expect(vault.kind).toBe('cash_container')
+    expect(contents.some(h => h.kind === 'cash' && h.symbol === 'SAR')).toBe(true)
+    expect(contents.some(h => h.kind === 'cash' && h.symbol === 'USD')).toBe(true)
+    expect(contents.some(h => h.kind === 'metal')).toBe(true)
+  })
+  it('asset grouping classifies cash separately from investments and real estate', () => {
+    expect(assetGroupOf('cash')).toBe('cash_and_equivalents')
+    expect(assetGroupOf('metal')).toBe('investments')
+    expect(assetGroupOf('fund')).toBe('investments')
+    expect(assetGroupOf('real_estate')).toBe('real_estate')
+  })
   it('account digital twin totals holdings in that real account', () => { expect(accountValueSar(seedState, 'acc-alinma')).toBe(1000000) })
   it('portfolio tree rolls up children without duplicating parent value', () => { expect(portfolioRollupValueSar(seedState, 'p-commitments')).toBe(300000) })
   it('one portfolio can span several real accounts', () => { expect(portfolioRollupValueSar(seedState, 'p-monthly')).toBe(200000); expect(new Set(seedState.portfolioSlices.filter(s => s.portfolioId === 'p-monthly').map(s => seedState.holdings.find(h => h.id === s.holdingId)?.accountId)).size).toBe(2) })
@@ -20,6 +42,13 @@ describe('MyFinMan Foundation V4 invariants', () => {
   it('realized gain is calculated only on real conversion/disposal', () => { const p = previewConversion(seedState, baseConversion); expect(p.sourceCostBasisSar).toBe(3740); expect(p.realizedGainLossSar).toBe(50) })
   it('conversion cannot silently consume a protected portfolio slice', () => { const input = { ...baseConversion, sourceHoldingId: 'h-gold', sourceQuantity: 1, targetQuantity: 545 }; expect(() => previewConversion(seedState, input)).toThrow() })
   it('conversion from a selected portfolio preserves the economic purpose on the target', () => { const input = { ...baseConversion, sourceHoldingId: 'h-gold', sourcePortfolioId: 'p-invest', sourceQuantity: 1, targetQuantity: 545 }; const next = applyConversion(seedState, input, '2026-08-16T20:00:00.000Z'); const targetId = next.ledger[0].targetHoldingId!; expect(next.portfolioSlices.some(s => s.holdingId === targetId && s.portfolioId === 'p-invest')).toBe(true); expect(next.ledger[0].realizedGainLossSar).not.toBeNull(); expect(assertCostBasisCoverageInvariant(next.holdings.find(h => h.id === 'h-gold')!)).toBe(true) })
+  it('cash conversion uses nominal valuation for SAR and FX valuation for foreign cash', () => {
+    const sarNext = applyConversion(seedState, baseConversion, '2026-08-16T20:00:00.000Z')
+    expect(sarNext.holdings.find(h => h.id === sarNext.ledger[0].targetHoldingId)?.valuationMethod).toBe('nominal')
+    const usdInput = { ...baseConversion, sourceHoldingId: 'h-vault-sar', sourceQuantity: 375, targetSymbol: 'USD', targetName: 'دولار أمريكي', targetUnit: 'USD', targetQuantity: 100, targetUnitValueSarAtExecution: 3.75, targetAccountId: 'acc-vault', targetCustodianId: SELF_ID }
+    const usdNext = applyConversion(seedState, usdInput, '2026-08-16T20:00:00.000Z')
+    expect(usdNext.holdings.find(h => h.id === usdNext.ledger[0].targetHoldingId)?.valuationMethod).toBe('fx')
+  })
   it('weighted-average disposal keeps remaining lots covered and preserves remaining weighted cost', () => {
     const state = structuredClone(seedState)
     const usd = state.holdings.find(h => h.id === 'h-usd')!
