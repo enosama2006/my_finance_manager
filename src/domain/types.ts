@@ -1,5 +1,6 @@
-export type AssetKind = 'cash' | 'currency' | 'metal' | 'collectible' | 'fund' | 'stock' | 'crypto' | 'real_estate' | 'fixed_term' | 'receivable' | 'other'
-export type AccountKind = 'checking' | 'saving' | 'investment' | 'cash' | 'prepaid' | 'custody' | 'fixed_term' | 'credit_card'
+export type AssetKind = 'cash' | 'metal' | 'collectible' | 'fund' | 'stock' | 'crypto' | 'real_estate' | 'fixed_term' | 'receivable' | 'other'
+export type AssetGroup = 'cash_and_equivalents' | 'investments' | 'real_estate' | 'other'
+export type AccountKind = 'checking' | 'saving' | 'investment' | 'cash_container' | 'prepaid' | 'custody' | 'fixed_term' | 'credit_card'
 export type AccountStatus = 'active' | 'closed' | 'archived'
 export type PortfolioStatus = 'active' | 'closed' | 'archived'
 export type TransactionStatus = 'draft' | 'posted'
