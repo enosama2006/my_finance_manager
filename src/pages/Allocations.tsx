@@ -12,7 +12,7 @@ export function Allocations() {
   const roots = state.portfolios.filter(p => !p.parentId && p.status === 'active')
   return <div className="page-stack">
     <section className="section-intro"><div><span className="eyebrow">PORTFOLIO ≠ POSITION ≠ CYCLE</span><h2>المحافظ كغرض وحوكمة</h2><p>المحفظة تجيب «لماذا؟». داخلها قد توجد مراكز أصول ودورات قصيرة أو طويلة. بيع أصل واحد لا يغلق المحفظة، والمساهمة الجديدة ليست ربحًا.</p></div></section>
-    <section className="portfolio-tree">{roots.map(root => <PortfolioNode key={root.id} portfolio={root} depth={0} />)}</section>
+    <section className="portfolio-tree">{roots.length === 0 ? <div className="empty-preview"><Layers3 /><strong>لا توجد محافظ بعد</strong><span>أنشئ أول محفظة من «العمليات المالية» ثم خصص لها نقدًا أو أصولًا.</span></div> : roots.map(root => <PortfolioNode key={root.id} portfolio={root} depth={0} />)}</section>
   </div>
 
   function PortfolioNode({ portfolio, depth }: { portfolio: Portfolio; depth: number }) {
@@ -21,19 +21,21 @@ export function Allocations() {
     const rollup = portfolioRollupValueSar(state, portfolio.id)
     const direct = portfolioDirectValueSar(state, portfolio.id)
     const target = portfolio.targetValueSar
-    const ratio = target ? Math.min(100, Math.max(0, rollup / target * 100)) : null
+    const spendingLike = portfolio.profile === 'commitment' || portfolio.profile === 'spending_budget'
+    const coverage = spendingLike ? portfolioCoverage(state, portfolio.id) : null
+    const ratioBase = coverage ? coverage.requiredSar : target
+    const ratio = ratioBase ? Math.min(100, Math.max(0, rollup / ratioBase * 100)) : null
     const ownerNames = portfolio.ownerIds.map(id => state.parties.find(p => p.id === id)?.name ?? id).join('، ')
     const slices = state.portfolioSlices.filter(s => s.portfolioId === portfolio.id)
     const portfolioPositions = (state.positions ?? []).filter(p => p.portfolioId === portfolio.id)
     const portfolioCycles = (state.capitalCycles ?? []).filter(c => c.portfolioId === portfolio.id)
-    const coverage = portfolio.profile === 'commitment' ? portfolioCoverage(state, portfolio.id) : null
     return <article className={`portfolio-node depth-${Math.min(depth, 3)}`}>
       <button className="portfolio-node-head" onClick={() => setOpen(!open)}>
         <div className="tree-title"><div className="tree-avatar"><Layers3 size={18} /></div><div><strong>{portfolio.name}</strong><span>المالك: {ownerNames}{portfolio.profile ? ` • ${profileName(portfolio.profile)}` : ''}{portfolio.beneficiaryId ? ` • مستفيد: ${state.parties.find(p => p.id === portfolio.beneficiaryId)?.name}` : ''}</span></div></div>
         <div className="tree-summary"><strong>{money.format(rollup)} ر.س</strong>{children.length || slices.length ? (open ? <ChevronDown size={18} /> : <ChevronLeft size={18} />) : null}</div>
       </button>
-      {target != null && <div className="portfolio-progress"><div><span><Target size={13} /> الهدف/المطلوب {money.format(target)} ر.س</span><strong>{Math.round(ratio ?? 0)}%</strong></div><div className="progress"><span style={{ width: `${ratio ?? 0}%` }} /></div></div>}
-      {coverage && <div className="portfolio-direct"><span>التغطية الاقتصادية {money.format(coverage.economicCoverageSar)} ر.س • الجاهز للسداد {money.format(coverage.settlementReadySar)} ر.س</span><strong>{Math.round(coverage.settlementReadyPct)}% جاهز</strong></div>}
+      {target != null && <div className="portfolio-progress"><div><span><Target size={13} /> {coverage ? `الهدف ${money.format(coverage.originalTargetSar)} • صُرف ${money.format(coverage.spentSar)} • المتبقي ${money.format(coverage.requiredSar)} ر.س` : `الهدف/المطلوب ${money.format(target)} ر.س`}</span><strong>{Math.round(ratio ?? 0)}%</strong></div><div className="progress"><span style={{ width: `${ratio ?? 0}%` }} /></div></div>}
+      {coverage && <div className="portfolio-direct"><span>الرصيد المخصص {money.format(coverage.economicCoverageSar)} ر.س • الجاهز نقديًا {money.format(coverage.settlementReadySar)} ر.س</span><strong>{coverage.requiredSar <= 0 ? 'مكتمل' : `${Math.round(coverage.settlementReadyPct)}% جاهز`}</strong></div>}
       {open && <div className="portfolio-node-body">
         {(portfolioPositions.length > 0 || portfolioCycles.length > 0) && <div className="portfolio-direct"><span>{portfolioPositions.filter(p => p.status !== 'closed').length} مراكز مفتوحة • {portfolioPositions.filter(p => p.status === 'closed').length} مغلقة</span><strong>{portfolioCycles.filter(c => c.status !== 'closed').length} دورات نشطة</strong></div>}
         {direct > 0 && <div className="portfolio-direct"><span>حيازات مباشرة</span><strong>{money.format(direct)} ر.س</strong></div>}

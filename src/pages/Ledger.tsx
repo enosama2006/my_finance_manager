@@ -1,4 +1,4 @@
-import { ArrowDownLeft, ArrowLeftRight, ArrowUpRight, History, RefreshCcw, Repeat2, SlidersHorizontal, WalletCards } from 'lucide-react'
+import { ArrowDownLeft, ArrowLeftRight, ArrowUpRight, Boxes, FolderTree, History, RefreshCcw, Repeat2, SlidersHorizontal, WalletCards } from 'lucide-react'
 import type { ReactNode } from 'react'
 import { useFinance } from '../application/store'
 import '../ledger-mobile.css'
@@ -9,7 +9,12 @@ export function Ledger() {
   const { state } = useFinance()
   return <div className="page-stack">
     <section className="section-intro"><div><span className="eyebrow">LOGICAL TRANSACTIONS + AUDIT</span><h2>الحركات</h2><p>تصحيح خطأ الإدخال يجب أن يبقي Logical Transaction واحدة مع Revision History. أما Refund أو تحويل حدث فعلًا فهو حركة جديدة مستقلة.</p></div><div className="lock-note"><History size={16} /> محفوظة المراجعات</div></section>
-    <section className="ledger-feed">{state.ledger.map(tx => { const gain = tx.realizedGainLossSar; return <article className="ledger-event-card" key={tx.id}><div className={`ledger-event-icon ${tx.kind}`}>{kindIcon(tx.kind)}</div><div className="ledger-event-body"><div className="ledger-event-top"><div><span>{new Date(tx.at).toLocaleDateString('ar-SA')} • v{tx.version}</span><strong>{tx.title}</strong></div><strong className="ledger-event-amount">{money.format(tx.amountSar)} <small>ر.س</small></strong></div>{tx.note && <p>{tx.note}</p>}<div className="ledger-event-foot"><span className={`type-chip ${tx.kind}`}>{kindName(tx.kind)}</span>{(tx.kind === 'conversion' || tx.kind === 'asset_sale') && gain != null && <span className={gain >= 0 ? 'profit realized-chip' : 'loss realized-chip'}>محقق {gain >= 0 ? '+' : ''}{money.format(gain)} ر.س</span>}{tx.revisions.length > 0 && <span className="realized-chip">{tx.revisions.length} مراجعة</span>}</div></div></article> })}</section>
+    <section className="ledger-feed">{state.ledger.length === 0 ? <div className="empty-preview"><History /><strong>لا توجد حركات بعد</strong><span>ابدأ بإضافة رصيد أو تسجيل مصروف أو شراء أصل.</span></div> : state.ledger.map(tx => {
+      const gain = tx.realizedGainLossSar
+      const category = tx.expenseCategoryId ? (state.expenseCategories ?? []).find(c => c.id === tx.expenseCategoryId) : undefined
+      const portfolio = tx.portfolioId ? state.portfolios.find(p => p.id === tx.portfolioId) : undefined
+      return <article className="ledger-event-card" key={tx.id}><div className={`ledger-event-icon ${tx.kind}`}>{kindIcon(tx.kind)}</div><div className="ledger-event-body"><div className="ledger-event-top"><div><span>{new Date(tx.at).toLocaleDateString('ar-SA')} • v{tx.version}</span><strong>{tx.title}</strong></div><strong className="ledger-event-amount">{money.format(tx.amountSar)} <small>ر.س</small></strong></div>{tx.note && <p>{tx.note}</p>}<div className="ledger-event-foot"><span className={`type-chip ${tx.kind}`}>{kindName(tx.kind)}</span>{category && <span className="realized-chip"><FolderTree size={12} /> {category.name}</span>}{portfolio && <span className="realized-chip"><Boxes size={12} /> {portfolio.name}</span>}{(tx.kind === 'conversion' || tx.kind === 'asset_sale') && gain != null && <span className={gain >= 0 ? 'profit realized-chip' : 'loss realized-chip'}>محقق {gain >= 0 ? '+' : ''}{money.format(gain)} ر.س</span>}{tx.revisions.length > 0 && <span className="realized-chip">{tx.revisions.length} مراجعة</span>}</div></div></article>
+    })}</section>
   </div>
 }
 

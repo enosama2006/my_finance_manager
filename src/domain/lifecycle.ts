@@ -39,6 +39,8 @@ export function positionMetrics(state: FinanceState, positionId: string): Positi
 }
 
 export interface PortfolioCoverage {
+  originalTargetSar: number
+  spentSar: number
   requiredSar: number
   economicCoverageSar: number
   settlementReadySar: number
@@ -59,8 +61,13 @@ export function portfolioCoverage(state: FinanceState, portfolioId: string): Por
     const h = state.holdings.find(x => x.id === s.holdingId)
     return sum + (h?.kind === 'cash' ? s.quantity * h.marketPriceSar : 0)
   }, 0))
-  const requiredSar = round2(portfolio.targetValueSar ?? economicCoverageSar)
+  const spentSar = round2(state.ledger.filter(tx => tx.kind === 'expense' && tx.portfolioId === portfolioId).reduce((sum, tx) => sum + tx.amountSar, 0))
+  const originalTargetSar = round2(portfolio.targetValueSar ?? economicCoverageSar)
+  const consumesTarget = portfolio.profile === 'commitment' || portfolio.profile === 'spending_budget'
+  const requiredSar = consumesTarget ? round2(Math.max(0, originalTargetSar - spentSar)) : originalTargetSar
   return {
+    originalTargetSar,
+    spentSar,
     requiredSar,
     economicCoverageSar,
     settlementReadySar,
