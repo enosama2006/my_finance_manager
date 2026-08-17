@@ -131,8 +131,8 @@ function runGoldSell(state: FinanceState): FinanceState {
   next = { ...next,
     holdings: next.holdings.map(h => h.id !== 'h-lab-gold' ? h : { ...h, quantity: 0, ownership: h.ownership.map(o => ({ ...o, quantity: 0 })), costLots: [], archived: true }),
     portfolioSlices: next.portfolioSlices.filter(s => s.holdingId !== 'h-lab-gold'),
-    positions: positions(next).map(p => p.id !== 'pos-lab-gold' ? p : { ...p, status: 'closed', closedAt: now(), realizedGainLossSar: 100 }),
-    capitalCycles: cycles(next).map(c => c.id !== 'cycle-lab-gold' ? c : { ...c, status: 'closed', closedAt: now(), realizedGainsSar: 100, reportingResultSar: 100, transactionIds: [...c.transactionIds, 'lab-gold-sell'] }),
+    positions: positions(next).map(p => p.id !== 'pos-lab-gold' ? p : { ...p, status: 'closed' as const, closedAt: now(), realizedGainLossSar: 100 }),
+    capitalCycles: cycles(next).map(c => c.id !== 'cycle-lab-gold' ? c : { ...c, status: 'closed' as const, closedAt: now(), realizedGainsSar: 100, reportingResultSar: 100, transactionIds: [...c.transactionIds, 'lab-gold-sell'] }),
   }
   return appendTx(next, { ...baseTx('lab-gold-sell', 'asset_sale', 'تسييل 10غ ذهب', 5500), sourceHoldingId: 'h-lab-gold', targetHoldingId: 'h-alrajhi-sar', sourceQuantity: 10, realizedGainLossSar: 100, positionId: 'pos-lab-gold', cycleId: 'cycle-lab-gold', portfolioId: 'p-invest', note: '5,400 رجوع أصل رأس المال + 100 ربح محقق؛ 5,500 ليست كلها دخلًا.' })
 }
@@ -178,7 +178,7 @@ function runUsdSell(state: FinanceState): FinanceState {
   let next = creditCash(state, 'h-alrajhi-sar', 37400)
   next = { ...next,
     holdings: next.holdings.map(h => h.id !== 'h-lab-usd' ? h : { ...h, quantity: 0, ownership: h.ownership.map(o => ({ ...o, quantity: 0 })), costLots: [], archived: true }),
-    positions: positions(next).map(p => p.id !== 'pos-lab-usd' ? p : { ...p, status: 'closed', closedAt: now(), realizedGainLossSar: -250 }),
+    positions: positions(next).map(p => p.id !== 'pos-lab-usd' ? p : { ...p, status: 'closed' as const, closedAt: now(), realizedGainLossSar: -250 }),
   }
   return appendTx(next, { ...baseTx('lab-usd-sell', 'conversion', 'إعادة USD إلى SAR', 37400), sourceHoldingId: 'h-lab-usd', targetHoldingId: 'h-alrajhi-sar', sourceQuantity: 10000, realizedGainLossSar: -250, positionId: 'pos-lab-usd', note: 'الخسارة تحققت عند إغلاق مركز العملة: 37,400 - 37,650 = -250 SAR.' })
 }
@@ -214,8 +214,8 @@ function runCommercialClose(state: FinanceState): FinanceState {
   let next: FinanceState = {
     ...state,
     holdings: state.holdings.map(h => h.id !== 'h-lab-try' ? h : { ...h, quantity: residualTry, ownership: [{ ownerId: SELF_ID, quantity: residualTry }], costLots: [{ id: 'lot-lab-try-residual', ownerId: SELF_ID, quantity: residualTry, unitCostSar: round6(finalResultSar / residualTry), acquiredAt: now() }], positionId: residualPosition.id, acquisitionJourney: ['Closed cycle residual', '4,550 TRY'] }),
-    positions: positions(state).map(p => p.id !== 'pos-lab-try' ? p : { ...p, status: 'closed', closedAt: now(), holdingIds: [] }).concat(residualPosition),
-    capitalCycles: cycles(state).map(c => c.id !== 'cycle-commercial' ? c : { ...c, status: 'closed', closedAt: now(), directCostsSar: extraCostSar, openObligationSar: 0, reportingResultSar: finalResultSar, nativeResultAmount: residualTry, nativeResultCurrency: 'TRY', transactionIds: [...c.transactionIds, 'lab-commercial-close'], note: 'تمت التسوية؛ استُهلك 45,450 TRY من الحصيلة وبقي 4,550 TRY ربحًا نهائيًا للدورة.' }),
+    positions: positions(state).map<Position>(p => p.id !== 'pos-lab-try' ? p : { ...p, status: 'closed', closedAt: now(), holdingIds: [] as string[] }).concat(residualPosition),
+    capitalCycles: cycles(state).map(c => c.id !== 'cycle-commercial' ? c : { ...c, status: 'closed' as const, closedAt: now(), directCostsSar: extraCostSar, openObligationSar: 0, reportingResultSar: finalResultSar, nativeResultAmount: residualTry, nativeResultCurrency: 'TRY', transactionIds: [...c.transactionIds, 'lab-commercial-close'], note: 'تمت التسوية؛ استُهلك 45,450 TRY من الحصيلة وبقي 4,550 TRY ربحًا نهائيًا للدورة.' }),
   }
   next = appendTx(next, { ...baseTx('lab-commercial-close', 'expense', 'إكمال التسوية وتثبيت نتيجة الدورة', extraCostSar), cycleId: 'cycle-commercial', note: 'النتيجة النهائية 4,550 TRY ≈ 379.17 SAR في فرضيات السيناريو، وأصبحت البقية مركز TRY جديدًا مستقلًا.' })
   return next
