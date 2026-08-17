@@ -6,6 +6,7 @@ import type { CreateGroupedAccountInput } from '../application/accountGroups'
 import { previewSimplifiedPurchase, type SimplifiedPurchaseInput } from '../application/purchase'
 import { useToast } from '../components/ToastProvider'
 import { assetTypeById, assetTypeCatalog, defaultPerformanceRoleForKind, type AssetTypeId } from '../domain/assetCatalog'
+import { currencyByCode, currencyCatalog, currencyReferenceRateSar } from '../domain/currencies'
 import { availableQuantity, ownerQuantity } from '../domain/finance'
 import type { Account, AccountKind, FinanceState, Holding, Party, Portfolio, PortfolioProfile } from '../domain/types'
 import { fetchMarketQuote, type MarketQuote } from '../data/marketData'
@@ -204,7 +205,7 @@ function AccountForm({ state, onSubmit }: { state: FinanceState; onSubmit: (inpu
   return <FormShell title="إضافة حساب" subtitle="الحساب هو الوعاء الحاوي للأصول. ضعه في مجموعة إن أردت، أو اتركه بلا مجموعة."><form className="trade-form" onSubmit={submit}>
     <Field label="المجموعة (اختياري)"><select value={groupId} onChange={e => setGroup(e.target.value)}><option value="">بدون مجموعة</option>{groups.map(g => <option key={g.id} value={g.id}>{g.name}</option>)}</select><small>المجموعة تنظيم بصري فقط ويمكن تغييرها لاحقًا.</small></Field>
     <div className="field-grid"><Field label="اسم الحساب"><input value={name} onChange={e => setName(e.target.value)} placeholder="الراجحي الجاري / خزنة المنزل / دراية" /></Field><Field label="نوع الحساب"><select value={kind} onChange={e => setKind(e.target.value as AccountKind)}>{accountKinds.map(item => <option key={item.value} value={item.value}>{item.label}</option>)}</select></Field></div>
-    <div className="field-grid"><Field label="العملة الأساسية"><input value={currency} onChange={e => setCurrency(e.target.value.toUpperCase())} /></Field><Field label="آخر 4 أرقام (اختياري)"><input value={last4} onChange={e => setLast4(e.target.value)} maxLength={4} /></Field></div>
+    <div className="field-grid"><Field label="العملة الأساسية"><select value={currency} onChange={e => setCurrency(e.target.value)}>{currencyCatalog.map(item => <option key={item.code} value={item.code}>{item.code} — {item.label}</option>)}</select></Field><Field label="آخر 4 أرقام (اختياري)"><input value={last4} onChange={e => setLast4(e.target.value.replace(/\D/g, '').slice(0, 4))} inputMode="numeric" maxLength={4} /></Field></div>
     <button className="primary wide" type="submit">إضافة الحساب</button>
   </form></FormShell>
 }
@@ -213,22 +214,40 @@ function FundsForm({ state, owners, accounts, portfolios, onSubmit }: { state: F
   const eligible = accounts.filter(a => a.kind !== 'credit_card')
   const [ownerId, setOwner] = useState(owners.find(o => o.id === SELF_ID)?.id ?? owners[0]?.id ?? '')
   const [accountId, setAccount] = useState(eligible[0]?.id ?? '')
-  const [symbol, setSymbol] = useState('SAR')
+  const initialCurrency = eligible[0]?.currency && currencyByCode(eligible[0].currency) ? currencyByCode(eligible[0].currency)!.code : 'SAR'
+  const [symbol, setSymbol] = useState(initialCurrency)
+  const initialRate = currencyReferenceRateSar(initialCurrency) ?? 1
   const [quantity, setQuantity] = useState('')
-  const [unitCost, setUnitCost] = useState('1')
-  const [market, setMarket] = useState('1')
+  const [unitCost, setUnitCost] = useState(String(initialRate))
+  const [market, setMarket] = useState(String(initialRate))
   const [classification, setClass] = useState<'opening' | 'income'>('opening')
   const [portfolioId, setPortfolio] = useState('')
+  const fixedRate = currencyReferenceRateSar(symbol)
+  const currency = currencyByCode(symbol)
+
+  useEffect(() => {
+    const account = eligible.find(a => a.id === accountId)
+    const next = currencyByCode(account?.currency)?.code
+    if (next) setSymbol(next)
+  }, [accountId, eligible])
+
+  useEffect(() => {
+    const rate = currencyReferenceRateSar(symbol)
+    if (rate != null) { setUnitCost(String(rate)); setMarket(String(rate)) }
+  }, [symbol])
+
   const submit = (e: FormEvent) => {
     e.preventDefault()
-    const ok = onSubmit({ accountId, ownerId, symbol, nativeUnit: symbol, quantity: num(quantity), unitCostSar: symbol === 'SAR' ? 1 : num(unitCost), marketPriceSar: symbol === 'SAR' ? 1 : num(market), classification, portfolioId: portfolioId || undefined })
-    if (ok) { setQuantity(''); setUnitCost('1'); setMarket('1'); setPortfolio('') }
+    const unitCostSar = fixedRate ?? num(unitCost)
+    const marketPriceSar = fixedRate ?? num(market)
+    const ok = onSubmit({ accountId, ownerId, symbol, nativeUnit: symbol, quantity: num(quantity), unitCostSar, marketPriceSar, classification, portfolioId: portfolioId || undefined })
+    if (ok) { setQuantity(''); setPortfolio(''); if (fixedRate == null) { setUnitCost(''); setMarket('') } }
   }
   if (!eligible.length) return <EmptyAction title="أنشئ حسابًا أولًا" text="الرصيد يجب أن يوجد داخل حساب. المجموعة ليست شرطًا." />
-  return <FormShell title="إضافة رصيد" subtitle="الرصيد الافتتاحي يسجل مرة واحدة فقط لكل حساب/مالك/عملة، ويمكن تصحيحه لاحقًا من الحركات. أما الدخل فهو تدفق متكرر."><form className="trade-form" onSubmit={submit}>
+  return <FormShell title="إضافة رصيد" subtitle="أدخل الرصيد بعملته الأصلية. التطبيق يحتفظ بالكمية الأصلية ويحوّل قيمتها إلى عملة العرض في التجميع والتقارير."><form className="trade-form" onSubmit={submit}>
     <Field label="الحساب"><select value={accountId} onChange={e => setAccount(e.target.value)}>{eligible.map(a => <option key={a.id} value={a.id}>{accountLabel(state, a)}</option>)}</select></Field>
-    <div className="field-grid three"><Field label="المالك"><select value={ownerId} onChange={e => setOwner(e.target.value)}>{owners.map(o => <option key={o.id} value={o.id}>{o.name}</option>)}</select></Field><Field label="العملة"><input value={symbol} onChange={e => setSymbol(e.target.value.toUpperCase())} /></Field><Field label="المبلغ"><input value={quantity} onChange={e => setQuantity(e.target.value)} inputMode="decimal" /></Field></div>
-    {symbol !== 'SAR' && <div className="field-grid"><Field label="تكلفة الوحدة بالريال"><input value={unitCost} onChange={e => setUnitCost(e.target.value)} inputMode="decimal" /></Field><Field label="القيمة الحالية للوحدة"><input value={market} onChange={e => setMarket(e.target.value)} inputMode="decimal" /></Field></div>}
+    <div className="field-grid three"><Field label="المالك"><select value={ownerId} onChange={e => setOwner(e.target.value)}>{owners.map(o => <option key={o.id} value={o.id}>{o.name}</option>)}</select></Field><Field label="العملة"><select value={symbol} onChange={e => setSymbol(e.target.value)}>{currencyCatalog.map(item => <option key={item.code} value={item.code}>{item.code} — {item.label}</option>)}</select></Field><Field label={`المبلغ (${symbol})`}><input value={quantity} onChange={e => setQuantity(e.target.value)} inputMode="decimal" /></Field></div>
+    {fixedRate != null ? <div className="operation-rule"><span>سعر التقييم المرجعي: 1 {symbol} = {money.format(fixedRate)} ر.س{currency?.referenceNote ? ` • ${currency.referenceNote}` : ''}. الكمية تبقى {symbol}؛ هذا السعر يستخدم فقط للتقييم والتجميع.</span></div> : symbol !== 'SAR' && <div className="field-grid"><Field label="تكلفة الوحدة بالريال"><input value={unitCost} onChange={e => setUnitCost(e.target.value)} inputMode="decimal" placeholder="مثال: سعر الاقتناء بالريال" /></Field><Field label="القيمة الحالية للوحدة بالريال"><input value={market} onChange={e => setMarket(e.target.value)} inputMode="decimal" placeholder="سعر الصرف الحالي إلى SAR" /></Field></div>}
     <div className="field-grid"><Field label="التصنيف"><select value={classification} onChange={e => setClass(e.target.value as 'opening' | 'income')}><option value="opening">رصيد قائم / افتتاحي — مرة واحدة</option><option value="income">دخل جديد — قابل للتكرار</option></select></Field><Field label="المحفظة (اختياري)"><select value={portfolioId} onChange={e => setPortfolio(e.target.value)}><option value="">بدون تخصيص</option>{portfolios.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}</select></Field></div>
     {classification === 'opening' && <div className="operation-rule"><span>إذا كان هناك رصيد افتتاحي سابق لنفس الحساب والمالك والعملة، فلن نضيفه مرة ثانية؛ سيتم تعديل الرصيد الافتتاحي الموجود وتوحيد أي إدخالات مكررة قديمة.</span></div>}
     <button className="primary wide" type="submit">{classification === 'opening' ? 'حفظ الرصيد الافتتاحي' : 'إضافة الدخل'}</button>
