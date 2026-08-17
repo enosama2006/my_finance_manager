@@ -21,12 +21,16 @@ Presentation → Application → Domain → Repository → LocalStorage/API late
 
 - `docs/architecture-v4.md`
 - `docs/domain-rules.md`
+- `docs/cash-model-note.md`
 - `docs/implementation-status.md`
 
 ## ما تمثله النسخة الحالية
 
 - Mobile app shell وRTL.
-- Real Accounts كأساس لمطابقة الواقع.
+- **Cash أصل مستقل؛ Account/Container يحدد أين يوجد الأصل ولا يُحتسب أصلًا إضافيًا.**
+- أرصدة البنوك والنقد الفعلي والعملات الأجنبية تمثل `cash` Holdings؛ العملة يحددها `symbol` مثل SAR/USD.
+- تصنيف أعلى للأصول: النقد وما في حكمه، الاستثمارات، العقارات، وأصول أخرى.
+- Real Accounts كأساس لمطابقة الواقع، مع `cash_container` للخزائن حتى لا تختلط مع أصل Cash.
 - Owner منفصل عن Custodian وLocation.
 - Unified Portfolio Tree بدل فصل «المخصصات» عن «المحافظ».
 - Portfolio Slices بكميات Native داخل Holdings.
@@ -34,7 +38,7 @@ Presentation → Application → Domain → Repository → LocalStorage/API late
 - أصول لدى الغير وملكية مشتركة بلا double counting.
 - Valuation منفصل عن cash flow.
 - Asset Conversion مع Cost Basis وRealized P/L فقط عند conversion/disposal.
-- Repository abstraction بدل ربط React مباشرة بـ LocalStorage.
+- Repository abstraction بدل ربط React مباشرة بـ LocalStorage، مع Migration تلقائية من نموذج `currency` القديم إلى `cash`.
 - نمذجة Transaction revisions وLiabilities/Claims كأساس للمراحل التالية.
 
 > لا تعتبر Foundation V4 اكتمال Cycle 1. حالة كل use case والاختبارات المتبقية موثقة في `docs/implementation-status.md`.
