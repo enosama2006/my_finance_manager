@@ -70,6 +70,7 @@ IDs are never recycled after publication.
 ### Domain / Data
 - `domain/domain-model.md` — entities, relationships and invariants independent of UI/storage.
 - `domain/income-producing-assets-draft.md` — Draft extension for EconomicActivity/Venture, account-specific Portfolio funding reservations and income-producing Asset semantics discovered in SCN-002.
+- `domain/portfolio-and-settlement-taxonomy-draft.md` — Draft decomposition of Free Liquidity, Portfolio behavior profiles, physical payment source, economic bearer and inter-owner settlement/reimbursement.
 - `data/database-model.md` — target relational model; not the current LocalStorage shape.
 - `calculations/calculation-rules.md` — core formulas and financial semantics.
 - `calculations/income-producing-asset-performance.md` — Draft formulas for Portfolio liquidity/capital/value and operating/capital performance of income-producing Assets.
@@ -82,6 +83,7 @@ IDs are never recycled after publication.
 - `scenarios/SCN-001-precious-metals-distributed-custody.md` — Gold/Silver split across Home, Al Rajhi and brother custody; tests Asset vs Holding vs Custody vs Portfolio and identifies a possible custody-independent Portfolio allocation refinement.
 - `scenarios/SCN-002-income-producing-assets-and-investment-portfolio.md` — five-bank cash Portfolio, existing/new vehicles, vehicle rental, apartment rental and agricultural land; tests capital acquisition, Portfolio funding rebalance, cost vs market value and asset/activity profitability.
 - `scenarios/SCN-003-child-cash-custody-and-ownership-substitution.md` — Eid cash owned by children but held by Father; tests owner-vs-custody, owner-scoped Free Liquidity, internal Claim/Liability when another owner's cash is consumed, and a Draft same-asset ownership-substitution operation that replaces old fake bank transfers.
+- `scenarios/SCN-004-portfolio-archetypes-and-interowner-settlement.md` — child cash plus Gold purchase paid from Father's bank; separates physical payer, economic owner, Portfolio funding and reimbursement, and explores Spending/Commitment/Savings/Investment Portfolio behavior profiles.
 
 Scenarios are not merely examples. They are used to pressure-test the model. Each scenario should separate:
 - facts/requirements explicitly accepted by the user;
