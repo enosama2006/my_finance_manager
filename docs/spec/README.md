@@ -69,6 +69,7 @@ IDs are never recycled after publication.
 
 ### Domain / Data
 - `domain/domain-model.md` — entities, relationships and invariants independent of UI/storage.
+- `domain/income-producing-assets-draft.md` — Draft extension for EconomicActivity/Venture, account-specific Portfolio funding reservations and income-producing Asset semantics discovered in SCN-002.
 - `data/database-model.md` — target relational model; not the current LocalStorage shape.
 - `calculations/calculation-rules.md` — core formulas and financial semantics.
 - `calculations/income-producing-asset-performance.md` — Draft formulas for Portfolio liquidity/capital/value and operating/capital performance of income-producing Assets.
