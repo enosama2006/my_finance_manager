@@ -46,7 +46,8 @@ Use stable IDs in docs, code comments, tests and PR descriptions:
 - `RULE-xxx` — invariant/business rule.
 - `CALC-xxx` — financial calculation.
 - `DB-xxx` — target database table or persistence concept.
-- `TEST-xxx` — acceptance scenario.
+- `TEST-xxx` — acceptance scenario/test.
+- `SCN-xxx` — exploratory real-world scenario used to discover/refine rules.
 - `ADR-xxx` — architecture/product decision record.
 
 IDs are never recycled after publication.
@@ -71,6 +72,16 @@ IDs are never recycled after publication.
 - `use-cases/action-contracts.md` — what every important button/action does in the application/domain/data layers.
 - `use-cases/_TEMPLATE.md` — template for new use cases.
 
+### Scenario laboratory
+- `scenarios/SCN-001-precious-metals-distributed-custody.md` — Gold/Silver split across Home, Al Rajhi and brother custody; tests Asset vs Holding vs Custody vs Portfolio and identifies a possible custody-independent Portfolio allocation refinement.
+
+Scenarios are not merely examples. They are used to pressure-test the model. Each scenario should separate:
+- facts/requirements explicitly accepted by the user;
+- rules already Approved;
+- newly discovered challenges;
+- Draft proposals that must not be implemented until approved;
+- acceptance tests derived from the scenario.
+
 ### Quality and decisions
 - `quality/traceability-and-acceptance.md` — requirement → screen → action → entity → test traceability.
 - `decisions/decision-log.md` — accepted product/architecture decisions.
@@ -81,7 +92,7 @@ IDs are never recycled after publication.
 
 For any meaningful feature or behavior change:
 
-1. Identify the affected `SCR/ACT/UC/ENT/RULE/CALC/DB/TEST` IDs.
+1. Identify the affected `SCR/ACT/UC/ENT/RULE/CALC/DB/TEST/SCN` IDs.
 2. Update or create the specification **before or in the same PR as code**.
 3. If the behavior is unresolved, mark it `TBD`; do not code a guessed behavior.
 4. Record architectural/product decisions in the decision log or an ADR.
