@@ -72,6 +72,7 @@ IDs are never recycled after publication.
 - `domain/income-producing-assets-draft.md` — Draft extension for EconomicActivity/Venture, account-specific Portfolio funding reservations and income-producing Asset semantics discovered in SCN-002.
 - `domain/portfolio-and-settlement-taxonomy-draft.md` — Draft decomposition of Free Liquidity, Portfolio behavior profiles, physical payment source, economic bearer and inter-owner settlement/reimbursement.
 - `domain/settlement-mandate-and-encumbrance-draft.md` — Draft model for entrusted value that may be transformed across Assets/Accounts before delivery, with explicit cost/gain attribution and obligation-backed encumbrance.
+- `domain/acquisition-chain-and-cost-flow-draft.md` — Draft model for propagating all-in economic acquisition cost through intermediate Asset conversions into a final Asset without losing cost basis or double-counting friction.
 - `data/database-model.md` — target relational model; not the current LocalStorage shape.
 - `calculations/calculation-rules.md` — core formulas and financial semantics.
 - `calculations/income-producing-asset-performance.md` — Draft formulas for Portfolio liquidity/capital/value and operating/capital performance of income-producing Assets.
@@ -87,6 +88,7 @@ IDs are never recycled after publication.
 - `scenarios/SCN-004-portfolio-archetypes-and-interowner-settlement.md` — child cash plus Gold purchase paid from Father's bank; separates physical payer, economic owner, Portfolio funding and reimbursement, and explores Spending/Commitment/Savings/Investment Portfolio behavior profiles.
 - `scenarios/SCN-005-savings-backing-and-maturity-ladder.md` — savings intentionally segregated in Alinma, recurring monthly contributions, Namaa maturity/reinvestment and optional Portfolio backing policies.
 - `scenarios/SCN-006-entrusted-crypto-to-cash-settlement-cycle.md` — 1,000 USDT entrusted for delivery as USD cash; tests conversion mandate vs pure custody, sender-borne losses, operator execution spread, obligation-backed liquidity restriction and multi-step settlement across USDT/TRY/USD.
+- `scenarios/SCN-007-cost-flow-acquisition-chain.md` — SAR→USD→Land and payment→USDT→XRP examples; tests all-in effective acquisition cost, basis propagation, independent valuation, step-level versus end-to-end reporting and no-double-counting of conversion friction.
 
 Scenarios are not merely examples. They are used to pressure-test the model. Each scenario should separate:
 - facts/requirements explicitly accepted by the user;
