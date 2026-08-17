@@ -8,6 +8,33 @@
 
 الأبعاد المستقلة هي: Owner، Beneficiary، Portfolio، Asset/Holding، Account/Custodian، Location، Native Quantity، Cost Basis، Current Valuation، Liquidity/Availability/Clearing. لا يجوز دمج Owner أو Portfolio أو Asset Type أو Custody في شجرة واحدة أو حقل واحد.
 
+## النقد والحساب
+
+**Cash أصل. Account/Container ليس هو الأصل؛ هو المكان أو الوعاء الذي يوجد فيه الأصل.**
+
+- حساب الراجحي = `Account(checking)`.
+- 10,000 SAR داخله = `Holding(kind=cash, symbol=SAR)`.
+- خزنة المنزل = `Account(cash_container)`.
+- 5,000 SAR داخلها = Holding نقدي.
+- 1,000 USD داخلها = Holding نقدي آخر، بنفس `kind=cash` لكن برمز `USD` وتقييم `fx`.
+
+لا يوجد `AssetKind=currency` منفصل؛ العملة تحددها `symbol/nativeUnit`، أما طبيعة الأصل فهي `cash`.
+
+التصنيف الأعلى للأصول مشتق من النوع:
+
+```text
+Assets
+├─ Cash & Cash Equivalents
+├─ Investments
+│  ├─ Funds
+│  ├─ Stocks
+│  ├─ Metals (Gold / Silver)
+│  ├─ Crypto
+│  └─ Fixed-term investments
+├─ Real Estate
+└─ Other Assets
+```
+
 ## طبقات التطبيق
 
 ```text
@@ -27,7 +54,7 @@ React لا يملك قواعد مالية. التخزين الحالي LocalStor
 ## النموذج الحالي Foundation V4
 
 - `Party`: شخص/مالك/بنك/وسيط/جهة.
-- `Account`: النسخة الرقمية من الحساب أو مكان الحفظ الحقيقي، مع Stable ID وحالة وأرصدة مطابقة.
+- `Account`: النسخة الرقمية من الحساب أو مكان الحفظ الحقيقي، مع Stable ID وحالة وأرصدة مطابقة. الخزنة تستخدم `cash_container` كي لا تختلط مع أصل `cash`.
 - `Holding`: أصل + كمية أصلية داخل Account/Custodian.
 - `OwnershipShare`: حصص الملكية الاقتصادية داخل Holding.
 - `CostBasisLot`: كمية وتكلفة اقتناء مرتبطة بمالك محدد داخل Holding؛ السياسة الحالية `weighted_average` لكل مالك على حدة.
@@ -40,10 +67,14 @@ React لا يملك قواعد مالية. التخزين الحالي LocalStor
 
 ## العرض على الهاتف
 
-التنقل الرئيسي يبقى بخمس وجهات: الرئيسية، المحافظ، الأصول والحسابات، الحركات، تحويل الأصول. داخل «الأصول والحسابات» توجد Lenses مستقلة: المالك → نوع الأصل → الحساب/الحافظ. هذا يحقق تعليمات المستخدم الأحدث بجمع الدخول في شاشة واحدة مع إبقاء المفاهيم منفصلة وظيفيًا.
+التنقل الرئيسي يبقى بخمس وجهات: الرئيسية، المحافظ، الأصول والحسابات، الحركات، تحويل الأصول. داخل «الأصول والحسابات» توجد Lenses مستقلة: المالك → التصنيف/نوع الأصل → الحساب/الحافظ. هذا يحقق تعليمات المستخدم الأحدث بجمع الدخول في شاشة واحدة مع إبقاء المفاهيم منفصلة وظيفيًا.
 
 ## قواعد Foundation غير القابلة للكسر
 
+- الحساب لا يضاف إلى صافي الثروة فوق Holdings الموجودة داخله؛ وإلا حدث Double Counting.
+- Cash Holding قد يوجد في حساب بنكي أو خزنة أو Prepaid/Custody container دون أن يتغير كونه أصلًا نقديًا.
+- نقل Cash من حساب إلى حساب هو Real Transfer، لا Conversion ولا Realized P/L.
+- تغيير عملة `USD → SAR` هو Conversion بين أصلين نقديين مختلفي الرمز ويمكن أن يحقق Realized P/L حسب Cost Basis.
 - Available يُحسب من Portfolio Slices غير المخصصة لكل Holding/Owner، وليس Net Worth ناقص أهداف المحافظ.
 - مجموع Ownership Shares = Physical Native Quantity للـHolding.
 - مجموع CostBasisLots لكل Owner/Holding يغطي كمية ملكيته؛ التكلفة قد تكون مجهولة لكن الكمية لا تضيع.
