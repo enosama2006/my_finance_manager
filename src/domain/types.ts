@@ -1,12 +1,17 @@
-export type AssetKind = 'cash' | 'metal' | 'collectible' | 'fund' | 'stock' | 'crypto' | 'real_estate' | 'fixed_term' | 'receivable' | 'other'
+export type AssetKind = 'cash' | 'metal' | 'collectible' | 'fund' | 'stock' | 'crypto' | 'real_estate' | 'vehicle' | 'fixed_term' | 'receivable' | 'other'
 export type AssetGroup = 'cash_and_equivalents' | 'investments' | 'real_estate' | 'other'
 export type AccountKind = 'checking' | 'saving' | 'investment' | 'cash_container' | 'prepaid' | 'custody' | 'fixed_term' | 'credit_card'
 export type AccountStatus = 'active' | 'closed' | 'archived'
 export type PortfolioStatus = 'active' | 'closed' | 'archived'
+export type PortfolioProfile = 'spending_budget' | 'commitment' | 'savings_goal' | 'reserve' | 'investment' | 'deal'
 export type TransactionStatus = 'draft' | 'posted'
 export type TransactionKind = 'opening' | 'income' | 'expense' | 'real_transfer' | 'asset_purchase' | 'asset_sale' | 'conversion' | 'allocation_settlement' | 'ownership_event' | 'liability_creation' | 'liability_payment' | 'reconciliation' | 'refund'
 export type IncomeStatus = 'expected' | 'received' | 'late' | 'missed'
 export type ValuationMethod = 'nominal' | 'fx' | 'market_quote' | 'manual_appraisal' | 'contractual' | 'cost_fallback' | 'unvalued'
+export type PerformanceRole = 'transactional_cash' | 'bridge' | 'investment' | 'store_of_value'
+export type PositionStatus = 'open' | 'partially_disposed' | 'closed'
+export type CapitalCycleStatus = 'open' | 'partially_settled' | 'ready_to_close' | 'closed' | 'cancelled'
+export type CapitalCycleKind = 'investment_round' | 'commercial_operation' | 'commitment_period' | 'savings_period' | 'spending_period' | 'fixed_term_round'
 
 export interface Party {
   id: string
@@ -59,6 +64,9 @@ export interface Holding {
   location?: string
   ownership: OwnershipShare[]
   archived?: boolean
+  performanceRole?: PerformanceRole
+  positionId?: string
+  acquisitionJourney?: string[]
 }
 
 export interface Portfolio {
@@ -70,6 +78,10 @@ export interface Portfolio {
   purpose?: string
   targetValueSar?: number
   status: PortfolioStatus
+  profile?: PortfolioProfile
+  dueDate?: string
+  settlementAssetSymbol?: string
+  protectionMode?: 'flexible' | 'designated' | 'hard_reserved' | 'instrument_bound'
 }
 
 export interface PortfolioSlice {
@@ -78,6 +90,44 @@ export interface PortfolioSlice {
   holdingId: string
   ownerId: string
   quantity: number
+}
+
+export interface Position {
+  id: string
+  name: string
+  ownerId: string
+  portfolioId?: string
+  cycleId?: string
+  holdingIds: string[]
+  openedAt: string
+  closedAt?: string
+  status: PositionStatus
+  performanceRole: PerformanceRole
+  initialCostBasisSar: number
+  realizedGainLossSar: number
+  note?: string
+}
+
+export interface CapitalCycle {
+  id: string
+  name: string
+  ownerId: string
+  portfolioId?: string
+  kind: CapitalCycleKind
+  status: CapitalCycleStatus
+  openedAt: string
+  closedAt?: string
+  capitalInputSar: number
+  realizedGainsSar: number
+  realizedLossesSar: number
+  directCostsSar: number
+  openObligationSar: number
+  transactionIds: string[]
+  positionIds: string[]
+  nativeResultAmount?: number
+  nativeResultCurrency?: string
+  reportingResultSar?: number
+  note?: string
 }
 
 export interface TransactionRevision {
@@ -118,6 +168,9 @@ export interface LedgerTransaction {
   feesSar?: number
   realizedGainLossSar?: number | null
   note?: string
+  portfolioId?: string
+  cycleId?: string
+  positionId?: string
 }
 
 export interface IncomeStream {
@@ -163,6 +216,8 @@ export interface FinanceState {
   incomeStreams: IncomeStream[]
   liabilities: Liability[]
   claims: Claim[]
+  positions?: Position[]
+  capitalCycles?: CapitalCycle[]
 }
 
 export interface ConversionInput {

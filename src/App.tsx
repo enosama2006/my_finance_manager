@@ -6,9 +6,10 @@ import { Assets } from './pages/Assets'
 import { Allocations } from './pages/Allocations'
 import { Ledger } from './pages/Ledger'
 import { Trade } from './pages/Trade'
+import { ScenarioLab } from './pages/ScenarioLab'
 
 export default function App() {
-  const [page, setPage] = useState<PageKey>('dashboard')
+  const [page, setPage] = useState<PageKey>('lab')
   const { reset } = useFinance()
   return <Shell page={page} onPage={setPage} onReset={reset}>
     {page === 'dashboard' && <Dashboard goAssets={() => setPage('assets')} goTrade={() => setPage('trade')} />}
@@ -16,5 +17,6 @@ export default function App() {
     {page === 'allocations' && <Allocations />}
     {page === 'ledger' && <Ledger />}
     {page === 'trade' && <Trade />}
+    {page === 'lab' && <ScenarioLab />}
   </Shell>
 }
