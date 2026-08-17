@@ -60,6 +60,18 @@ function descendantsOf(state: FinanceState, categoryId: string): Set<string> {
   return result
 }
 
+export function expenseCategoryEffectiveNecessity(state: FinanceState, categoryId: string): ExpenseNecessity | undefined {
+  const all = categories(state)
+  let current = all.find(c => c.id === categoryId)
+  const seen = new Set<string>()
+  while (current && !seen.has(current.id)) {
+    seen.add(current.id)
+    if (current.defaultNecessity) return current.defaultNecessity
+    current = current.parentId ? all.find(c => c.id === current!.parentId) : undefined
+  }
+  return undefined
+}
+
 export interface UpdateExpenseCategoryInput {
   id: string
   name: string
@@ -240,7 +252,7 @@ export function spendExpense(state: FinanceState, input: SpendExpenseInput): Fin
     sourceQuantity: input.quantity,
     portfolioId: input.portfolioId,
     expenseCategoryId: category.id,
-    expenseNecessity: input.expenseNecessity ?? category.defaultNecessity,
+    expenseNecessity: input.expenseNecessity ?? expenseCategoryEffectiveNecessity(state, category.id),
     expenseBeneficiaryId: input.expenseBeneficiaryId,
     note: input.note?.trim() || (input.portfolioId ? 'مصروف مرتبط بمحفظة: خرج فعليًا من الحساب واستهلك من التخصيص الاقتصادي للمحفظة.' : 'مصروف غير مرتبط بمحفظة: استُهلك من السيولة الحرة.'),
   }
