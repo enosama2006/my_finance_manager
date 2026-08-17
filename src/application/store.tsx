@@ -12,8 +12,8 @@ import {
   type AddFundsInput, type AllocateToPortfolioInput, type CreatePortfolioInput, type ExistingAssetInput, type TransferFundsInput,
 } from './commands'
 import {
-  archiveAccountGroup, createAccountGroup, createGroupedAccount, moveAccountToGroup, updateAccountGroup,
-  type CreateAccountGroupInput, type CreateGroupedAccountInput, type UpdateAccountGroupInput,
+  archiveAccountGroup, createAccountGroup, createGroupedAccount, moveAccountToGroup, updateAccount, updateAccountGroup,
+  type CreateAccountGroupInput, type CreateGroupedAccountInput, type UpdateAccountGroupInput, type UpdateAccountInput,
 } from './accountGroups'
 import { applyHoldingMarketQuote, purchaseAssetSimplified, type SimplifiedPurchaseInput } from './purchase'
 import {
@@ -27,6 +27,7 @@ interface FinanceContextValue {
   state: FinanceState
   convert: (input: ConversionInput) => void
   addAccount: (input: CreateGroupedAccountInput) => void
+  updateAccount: (input: UpdateAccountInput) => void
   createAccountGroup: (input: CreateAccountGroupInput) => void
   updateAccountGroup: (input: UpdateAccountGroupInput) => void
   archiveAccountGroup: (groupId: string) => void
@@ -118,6 +119,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     state,
     convert: (input) => persist(applyManagedConversion(state, input)),
     addAccount: (input) => persist(createGroupedAccount(state, input)),
+    updateAccount: (input) => persist(updateAccount(state, input)),
     createAccountGroup: (input) => persist(createAccountGroup(state, input)),
     updateAccountGroup: (input) => persist(updateAccountGroup(state, input)),
     archiveAccountGroup: (groupId) => persist(archiveAccountGroup(state, groupId)),
