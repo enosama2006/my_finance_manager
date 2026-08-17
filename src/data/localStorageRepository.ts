@@ -1,19 +1,24 @@
-import type { FinanceState } from '../domain/types'
+import type { Account, FinanceState, Holding } from '../domain/types'
 import type { FinanceRepository } from './repository'
 
 const STORAGE_KEY = 'myfinman-foundation-v4'
 
 type LegacyFinanceStateV4 = Omit<FinanceState, 'accounts' | 'holdings'> & {
-  accounts: Array<Omit<FinanceState['accounts'][number], 'kind'> & { kind: FinanceState['accounts'][number]['kind'] | 'cash' }>
-  holdings: Array<Omit<FinanceState['holdings'][number], 'kind'> & { kind: FinanceState['holdings'][number]['kind'] | 'currency' }>
+  accounts: Array<Omit<Account, 'kind'> & { kind: Account['kind'] | 'cash' }>
+  holdings: Array<Omit<Holding, 'kind'> & { kind: Holding['kind'] | 'currency' }>
 }
 
 function migrateCashModel(parsed: LegacyFinanceStateV4): FinanceState {
-  return {
-    ...parsed,
-    accounts: parsed.accounts.map(account => account.kind === 'cash' ? { ...account, kind: 'cash_container' as const } : account),
-    holdings: parsed.holdings.map(holding => holding.kind === 'currency' ? { ...holding, kind: 'cash' as const } : holding),
-  }
+  const accounts: Account[] = parsed.accounts.map((account) => ({
+    ...account,
+    kind: account.kind === 'cash' ? 'cash_container' : account.kind,
+  }))
+  const holdings: Holding[] = parsed.holdings.map((holding) => ({
+    ...holding,
+    kind: holding.kind === 'currency' ? 'cash' : holding.kind,
+  }))
+
+  return { ...parsed, accounts, holdings }
 }
 
 export function createLocalStorageFinanceRepository(storage: Storage = window.localStorage): FinanceRepository {
