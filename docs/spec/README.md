@@ -73,6 +73,7 @@ IDs are never recycled after publication.
 - `domain/portfolio-and-settlement-taxonomy-draft.md` — Draft decomposition of Free Liquidity, Portfolio behavior profiles, physical payment source, economic bearer and inter-owner settlement/reimbursement.
 - `domain/settlement-mandate-and-encumbrance-draft.md` — Draft model for entrusted value that may be transformed across Assets/Accounts before delivery, with explicit cost/gain attribution and obligation-backed encumbrance.
 - `domain/acquisition-chain-and-cost-flow-draft.md` — Draft model for propagating all-in economic acquisition cost through intermediate Asset conversions into a final Asset without losing cost basis or double-counting friction.
+- `domain/valuation-and-performance-policy-draft.md` — Draft position-scoped policy separating Cost Basis, current valuation and performance-recognition behavior for transactional cash, bridge assets and investment/store-of-value positions.
 - `data/database-model.md` — target relational model; not the current LocalStorage shape.
 - `calculations/calculation-rules.md` — core formulas and financial semantics.
 - `calculations/income-producing-asset-performance.md` — Draft formulas for Portfolio liquidity/capital/value and operating/capital performance of income-producing Assets.
@@ -89,6 +90,7 @@ IDs are never recycled after publication.
 - `scenarios/SCN-005-savings-backing-and-maturity-ladder.md` — savings intentionally segregated in Alinma, recurring monthly contributions, Namaa maturity/reinvestment and optional Portfolio backing policies.
 - `scenarios/SCN-006-entrusted-crypto-to-cash-settlement-cycle.md` — 1,000 USDT entrusted for delivery as USD cash; tests conversion mandate vs pure custody, sender-borne losses, operator execution spread, obligation-backed liquidity restriction and multi-step settlement across USDT/TRY/USD.
 - `scenarios/SCN-007-cost-flow-acquisition-chain.md` — SAR→USD→Land and payment→USDT→XRP examples; tests all-in effective acquisition cost, basis propagation, independent valuation, step-level versus end-to-end reporting and no-double-counting of conversion friction.
+- `scenarios/SCN-008-valuation-role-and-performance-recognition.md` — separates always-on cost tracking from position-specific valuation/performance recognition; covers transactional USD, bridge USD to Land, Gold/XRP investments and volatile-currency investment with explicit FX quote direction.
 
 Scenarios are not merely examples. They are used to pressure-test the model. Each scenario should separate:
 - facts/requirements explicitly accepted by the user;
