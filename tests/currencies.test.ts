@@ -30,8 +30,8 @@ describe('currency valuation and reporting', () => {
 
   it('keeps native quantity while converting SAR rollups to the reporting currency', () => {
     expect(sarToReporting(150, 'USD')).toBe(40)
-    expect(formatReportingValue(150, 'SAR')).toContain('150')
-    expect(formatReportingValue(150, 'USD')).toContain('40')
+    expect(formatReportingValue(150, 'SAR', 'en-US')).toBe('150 ر.س')
+    expect(formatReportingValue(150, 'USD', 'en-US')).toBe('40 $')
   })
 
   it('does not override non-cash market valuation', () => {
