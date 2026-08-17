@@ -15,6 +15,7 @@ export interface MarketQuote {
 }
 
 const SAR_PER_USD_REFERENCE = 3.75
+const GRAMS_PER_TROY_OUNCE = 31.1034768
 
 async function tryConfiguredProxy(request: MarketQuoteRequest): Promise<MarketQuote | null> {
   try {
@@ -33,6 +34,28 @@ async function tryConfiguredProxy(request: MarketQuoteRequest): Promise<MarketQu
       asOf: data.asOf || new Date().toISOString(),
       isLive: true,
       note: data.note,
+    }
+  } catch {
+    return null
+  }
+}
+
+async function quoteMetalFromGoldApi(symbol: string): Promise<MarketQuote | null> {
+  const normalized = symbol.trim().toUpperCase()
+  if (normalized !== 'XAU' && normalized !== 'XAG') return null
+  try {
+    const response = await fetch(`https://api.gold-api.com/price/${normalized}`, { headers: { Accept: 'application/json' } })
+    if (!response.ok) return null
+    const data = await response.json() as { price?: number; updatedAt?: string; name?: string; symbol?: string }
+    const usdPerTroyOunce = Number(data.price)
+    if (!Number.isFinite(usdPerTroyOunce) || usdPerTroyOunce <= 0) return null
+    const sarPerGram = usdPerTroyOunce / GRAMS_PER_TROY_OUNCE * SAR_PER_USD_REFERENCE
+    return {
+      unitPriceSar: sarPerGram,
+      source: 'Gold API spot market data',
+      asOf: data.updatedAt || new Date().toISOString(),
+      isLive: true,
+      note: `السعر الفوري المصدر بالدولار/الأونصة الترويسية حُوّل إلى ريال/غرام باستخدام ${GRAMS_PER_TROY_OUNCE} غرام/أونصة ومرجع 3.75 ر.س/دولار.`,
     }
   } catch {
     return null
@@ -66,6 +89,7 @@ export async function fetchMarketQuote(request: MarketQuoteRequest): Promise<Mar
   const configured = await tryConfiguredProxy(request)
   if (configured) return configured
 
+  if (request.quoteStrategy === 'metal') return quoteMetalFromGoldApi(request.symbol)
   if (request.quoteStrategy === 'crypto') return quoteCryptoFromBinance(request.symbol)
   return null
 }
