@@ -8,9 +8,13 @@ import { createLocalStorageFinanceRepository } from '../data/localStorageReposit
 import { runScenario, type ScenarioId } from './scenarios'
 import { applyManagedConversion } from './conversionPolicy'
 import {
-  addAccount, addExistingAsset, addFunds, allocateToPortfolio, createPortfolio, transferFunds,
-  type AddAccountInput, type AddFundsInput, type AllocateToPortfolioInput, type CreatePortfolioInput, type ExistingAssetInput, type TransferFundsInput,
+  addExistingAsset, addFunds, allocateToPortfolio, createPortfolio, transferFunds,
+  type AddFundsInput, type AllocateToPortfolioInput, type CreatePortfolioInput, type ExistingAssetInput, type TransferFundsInput,
 } from './commands'
+import {
+  archiveAccountGroup, createAccountGroup, createGroupedAccount, moveAccountToGroup, updateAccountGroup,
+  type CreateAccountGroupInput, type CreateGroupedAccountInput, type UpdateAccountGroupInput,
+} from './accountGroups'
 import { applyHoldingMarketQuote, purchaseAssetSimplified, type SimplifiedPurchaseInput } from './purchase'
 import {
   archiveExpenseBeneficiary, archiveExpenseCategory, createExpenseBeneficiary, createExpenseCategory, createParty, spendExpense,
@@ -22,7 +26,11 @@ import {
 interface FinanceContextValue {
   state: FinanceState
   convert: (input: ConversionInput) => void
-  addAccount: (input: AddAccountInput) => void
+  addAccount: (input: CreateGroupedAccountInput) => void
+  createAccountGroup: (input: CreateAccountGroupInput) => void
+  updateAccountGroup: (input: UpdateAccountGroupInput) => void
+  archiveAccountGroup: (groupId: string) => void
+  moveAccountToGroup: (accountId: string, groupId?: string) => void
   addFunds: (input: AddFundsInput) => void
   addExistingAsset: (input: ExistingAssetInput) => void
   purchaseAsset: (input: SimplifiedPurchaseInput) => void
@@ -65,13 +73,38 @@ function materializeCategoryNecessity(categories: ExpenseCategory[]): ExpenseCat
   return categories.map(resolve)
 }
 
+/**
+ * Compatibility migration for data created while Place was a mandatory UX layer.
+ * It converts that presentation concept into user AccountGroups without touching
+ * accounts, holdings, ownership, cost basis, portfolios, or ledger history.
+ */
+function migrateLegacyPlacesToGroups(state: FinanceState): FinanceState {
+  let accountGroups = [...(state.accountGroups ?? [])]
+  let accounts = [...state.accounts]
+  const selfId = state.parties.find(p => p.type === 'self')?.id
+
+  for (const account of accounts) {
+    if (account.groupId || account.custodianId === selfId) continue
+    const legacy = state.parties.find(p => p.id === account.custodianId && p.type !== 'self' && p.type !== 'person')
+    if (!legacy) continue
+    const groupId = `legacy-group-${legacy.id}`
+    if (!accountGroups.some(g => g.id === groupId)) {
+      accountGroups.push({ id: groupId, name: legacy.name, status: 'active', description: 'تم تحويله تلقائيًا من طبقة المكان القديمة إلى مجموعة حسابات تنظيمية.', createdAt: new Date().toISOString() })
+    }
+    accounts = accounts.map(a => a.id === account.id ? { ...a, groupId } : a)
+  }
+  return { ...state, accountGroups, accounts }
+}
+
 function normalize(state: FinanceState): FinanceState {
+  const migrated = migrateLegacyPlacesToGroups(state)
   return {
-    ...state,
-    expenseCategories: materializeCategoryNecessity(state.expenseCategories ?? []),
-    expenseBeneficiaries: state.expenseBeneficiaries ?? [],
-    positions: state.positions ?? [],
-    capitalCycles: state.capitalCycles ?? [],
+    ...migrated,
+    accountGroups: migrated.accountGroups ?? [],
+    expenseCategories: materializeCategoryNecessity(migrated.expenseCategories ?? []),
+    expenseBeneficiaries: migrated.expenseBeneficiaries ?? [],
+    positions: migrated.positions ?? [],
+    capitalCycles: migrated.capitalCycles ?? [],
   }
 }
 
@@ -84,7 +117,11 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
   const value = useMemo<FinanceContextValue>(() => ({
     state,
     convert: (input) => persist(applyManagedConversion(state, input)),
-    addAccount: (input) => persist(addAccount(state, input)),
+    addAccount: (input) => persist(createGroupedAccount(state, input)),
+    createAccountGroup: (input) => persist(createAccountGroup(state, input)),
+    updateAccountGroup: (input) => persist(updateAccountGroup(state, input)),
+    archiveAccountGroup: (groupId) => persist(archiveAccountGroup(state, groupId)),
+    moveAccountToGroup: (accountId, groupId) => persist(moveAccountToGroup(state, accountId, groupId)),
     addFunds: (input) => persist(addFunds(state, input)),
     addExistingAsset: (input) => persist(addExistingAsset(state, input)),
     purchaseAsset: (input) => persist(purchaseAssetSimplified(state, input)),
