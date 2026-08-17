@@ -1,5 +1,4 @@
 import { createContext, useContext, useMemo, useState, type ReactNode } from 'react'
-import { applyConversion } from '../domain/finance'
 import type { ConversionInput, FinanceState } from '../domain/types'
 import type { MarketQuote } from '../data/marketData'
 import { parseSnapshot } from '../data/snapshot'
@@ -7,6 +6,7 @@ import { seedState } from '../data/seed'
 import { emptyState } from '../data/emptyState'
 import { createLocalStorageFinanceRepository } from '../data/localStorageRepository'
 import { runScenario, type ScenarioId } from './scenarios'
+import { applyManagedConversion } from './conversionPolicy'
 import {
   addAccount,
   addExistingAsset,
@@ -83,7 +83,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
 
   const value = useMemo<FinanceContextValue>(() => ({
     state,
-    convert: (input) => persist(applyConversion(state, input)),
+    convert: (input) => persist(applyManagedConversion(state, input)),
     addAccount: (input) => persist(addAccount(state, input)),
     addFunds: (input) => persist(addFunds(state, input)),
     addExistingAsset: (input) => persist(addExistingAsset(state, input)),
