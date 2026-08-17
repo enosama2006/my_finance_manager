@@ -12,7 +12,7 @@ export type ValuationMethod = 'nominal' | 'fx' | 'market_quote' | 'manual_apprai
 export type PerformanceRole = 'transactional_cash' | 'bridge' | 'investment' | 'store_of_value'
 export type PositionStatus = 'open' | 'partially_disposed' | 'closed'
 export type CapitalCycleStatus = 'open' | 'partially_settled' | 'ready_to_close' | 'closed' | 'cancelled'
-export type CapitalCycleKind = 'investment_round' | 'commercial_operation' | 'commitment_period' | 'savings_period' | 'spending_period' | 'fixed_term_round'
+export type CapitalCycleKind = 'investment_round' | 'commercial_operation' | 'commitment_period' | 'savings_period' | 'fixed_term_round'
 export type ExpenseCategoryStatus = 'active' | 'archived'
 export type ExpenseNecessity = 'obligation' | 'essential' | 'flexible' | 'discretionary'
 export type ExpenseBeneficiaryStatus = 'active' | 'archived'
@@ -24,10 +24,7 @@ export interface Party {
   type: 'person' | 'bank' | 'broker' | 'institution' | 'home' | 'place' | 'self'
 }
 
-/**
- * User-defined organizational folder above accounts.
- * It has no balance, ownership, custody, portfolio meaning, or ledger effect.
- */
+/** User-defined organizational folder above accounts; it has no financial effect. */
 export interface AccountGroup {
   id: string
   name: string
@@ -37,11 +34,7 @@ export interface AccountGroup {
   createdAt: string
 }
 
-/**
- * Account is the real container that holds Holdings.
- * groupId is presentation organization only. custodianId is retained for
- * backward compatibility with older prototype data and is not a required UX layer.
- */
+/** Account is the real container that holds Holdings. groupId is organizational only. */
 export interface Account {
   id: string
   name: string
@@ -158,6 +151,31 @@ export interface CapitalCycle {
   note?: string
 }
 
+/**
+ * Exact user-entered intent for an asset purchase. This is deliberately distinct
+ * from the projected Holding/Ledger fields so a correction can reverse the old
+ * projection and re-apply the corrected intent without inventing a transfer.
+ */
+export interface AssetPurchaseUserInput {
+  kind: 'asset_purchase'
+  sourceAccountId: string
+  sourceHoldingId: string
+  ownerId: string
+  amountPaid: number
+  targetAccountId: string
+  assetTypeId: string
+  name: string
+  symbol?: string
+  quantity: number
+  extraCostsSar?: number
+  portfolioId?: string
+  location?: string
+  marketUnitPriceSar?: number
+  marketSource?: string
+}
+
+export type TransactionUserInput = AssetPurchaseUserInput
+
 export interface TransactionRevision {
   version: number
   changedAt: string
@@ -179,6 +197,7 @@ export interface TransactionRevision {
     expenseCategoryId?: string
     expenseNecessity?: ExpenseNecessity
     expenseBeneficiaryId?: string
+    userInput?: TransactionUserInput
   }
 }
 
@@ -206,6 +225,8 @@ export interface LedgerTransaction {
   expenseBeneficiaryId?: string
   cycleId?: string
   positionId?: string
+  /** User-entered intent used for audited correction/reprojection. */
+  userInput?: TransactionUserInput
 }
 
 export interface IncomeStream { id: string; name: string; amountSar: number; dueDay: number; targetHoldingId: string; ownerId: string; status: IncomeStatus }
