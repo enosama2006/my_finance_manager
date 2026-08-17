@@ -186,6 +186,45 @@ TransactionLeg genericity must not weaken deterministic domain validation.
 
 ---
 
+## DEC-018 — Physical distribution creates Holdings, not duplicate Assets
+Status: `Approved`
+
+Decision:
+Gold remains one Gold Asset and Silver remains one Silver Asset at the economic/product level even when the owner's quantity is split across Home, Al Rajhi, Brother custody or other storage contexts.
+
+Separate custody/location pools are represented as separate Holdings of the same Asset. Asset totals are derived aggregations across the owner's Holdings and must not be stored again as additional wealth.
+
+Consequences:
+- moving Gold/Silver between storage locations changes Holdings/custody distribution but not Asset identity or total ownership;
+- custody movement does not create income, expense, conversion or realized P/L;
+- cost basis must survive/re-associate with moved quantity rather than reset;
+- UI may show Asset, Custody and Portfolio lenses over the same records.
+
+Scenario reference: `docs/spec/scenarios/SCN-001-precious-metals-distributed-custody.md`.
+
+---
+
+## DEC-019 — Ordinary Portfolio allocation may be custody-independent
+Status: `Draft architectural refinement — not yet Approved`
+
+Proposal:
+Evaluate replacing ordinary `PortfolioSlice -> Holding` coupling with an economic allocation at `Owner + Asset` level (conceptually `OwnerAssetPosition + PortfolioAllocation`). Exact physical Holding/Item reservation would become optional when the user explicitly wants a particular bar/location earmarked.
+
+Reason:
+The precious-metals scenario shows that moving Gold from Home to Bank should not require a purpose/Portfolio rewrite when only custody changed.
+
+Potential consequence if approved:
+- purpose remains stable across custody transfers;
+- Portfolio allocation invariant moves from `Owner+Holding` to aggregate `Owner+Asset`;
+- an optional physical reservation layer handles exact-bar/location earmarking;
+- `ENT-041/RULE-004/RULE-005` and database design would need deliberate superseding edits.
+
+Do not implement this proposal until explicitly approved.
+
+Scenario reference: `docs/spec/scenarios/SCN-001-precious-metals-distributed-custody.md`.
+
+---
+
 # How to add a decision
 
 For a small decision, append `DEC-xxx` here with:
