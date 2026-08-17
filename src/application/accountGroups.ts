@@ -1,3 +1,4 @@
+import { addAccount, type AddAccountInput } from './commands'
 import type { AccountGroup, FinanceState } from '../domain/types'
 
 const id = () => `ag-${crypto.randomUUID()}`
@@ -58,4 +59,18 @@ export function moveAccountToGroup(state: FinanceState, accountId: string, group
   if (!account) throw new Error('الحساب غير موجود')
   if (groupId && !groups(state).some(g => g.id === groupId && g.status === 'active')) throw new Error('المجموعة غير موجودة أو مؤرشفة')
   return { ...state, accounts: state.accounts.map(a => a.id === accountId ? { ...a, groupId: groupId || undefined } : a) }
+}
+
+export interface CreateGroupedAccountInput extends Omit<AddAccountInput, 'custodianId'> {
+  groupId?: string
+}
+
+/** Account is the real container. The old custodian field is schema-v4 compatibility only. */
+export function createGroupedAccount(state: FinanceState, input: CreateGroupedAccountInput): FinanceState {
+  if (input.groupId && !groups(state).some(g => g.id === input.groupId && g.status === 'active')) throw new Error('المجموعة غير موجودة أو مؤرشفة')
+  const selfId = state.parties.find(p => p.type === 'self')?.id ?? state.parties[0]?.id
+  if (!selfId) throw new Error('لا توجد هوية مالك أساسية في النظام')
+  const next = addAccount(state, { ...input, custodianId: selfId })
+  const created = next.accounts[next.accounts.length - 1]
+  return input.groupId ? moveAccountToGroup(next, created.id, input.groupId) : next
 }
