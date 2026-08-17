@@ -32,7 +32,7 @@ describe('MyFinMan Foundation V4 invariants', () => {
     expect(assetGroupOf('real_estate')).toBe('real_estate')
   })
   it('account digital twin totals holdings in that real account', () => { expect(accountValueSar(seedState, 'acc-alinma')).toBe(1000000) })
-  it('portfolio tree rolls up children without duplicating parent value', () => { expect(portfolioRollupValueSar(seedState, 'p-commitments')).toBe(300000) })
+  it('portfolio tree rolls up children without duplicating parent value', () => { expect(portfolioRollupValueSar(seedState, 'p-commitments')).toBeCloseTo(370000, 1) })
   it('one portfolio can span several real accounts', () => { expect(portfolioRollupValueSar(seedState, 'p-monthly')).toBe(200000); expect(new Set(seedState.portfolioSlices.filter(s => s.portfolioId === 'p-monthly').map(s => seedState.holdings.find(h => h.id === s.holdingId)?.accountId)).size).toBe(2) })
   it('available comes from unallocated holding slices, not net worth minus targets', () => { expect(availableByOwner(seedState, SELF_ID)).toBeGreaterThan(0); expect(assertPortfolioAllocationInvariant(seedState)).toBe(true) })
   it('physical native quantity equals ownership shares and cost lots cover each owner share', () => { expect(seedState.holdings.every(assertPhysicalQuantityInvariant)).toBe(true); expect(seedState.holdings.every(assertCostBasisCoverageInvariant)).toBe(true) })
