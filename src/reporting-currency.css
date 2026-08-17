@@ -1,0 +1,35 @@
+.assets-view-controls {
+  display: flex;
+  align-items: end;
+  gap: 12px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.reporting-currency-control {
+  display: grid;
+  gap: 6px;
+  min-width: 190px;
+}
+
+.reporting-currency-control > span {
+  font-size: 12px;
+  color: var(--muted, #8aa0a8);
+}
+
+.reporting-currency-control select {
+  min-height: 40px;
+  border-radius: 12px;
+}
+
+@media (max-width: 767px) {
+  .assets-view-controls {
+    width: 100%;
+    align-items: stretch;
+    justify-content: stretch;
+  }
+
+  .reporting-currency-control {
+    width: 100%;
+  }
+}
