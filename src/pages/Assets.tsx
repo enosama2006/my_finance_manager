@@ -1,133 +1,56 @@
-import { ChevronDown, ChevronLeft, FolderTree, MapPin, RefreshCcw, UserRoundCheck, WalletCards } from 'lucide-react'
-import { useMemo, useState } from 'react'
+import { ChevronDown, ChevronLeft, FolderTree, MapPin, Pencil, RefreshCcw, Trash2, UserRoundCheck, WalletCards, X } from 'lucide-react'
+import { useMemo, useState, type FormEvent } from 'react'
 import { useFinance } from '../application/store'
 import { useReportingCurrency } from '../application/reportingCurrency'
+import { GroupCascader } from '../components/GroupCascader'
 import { useToast } from '../components/ToastProvider'
 import { assetTypeById } from '../domain/assetCatalog'
-import { currencyByCode, formatReportingValue, holdingUnitValueSar, reportingCurrencyCatalog } from '../domain/currencies'
+import { currencyByCode, currencyCatalog, formatReportingValue, holdingUnitValueSar, reportingCurrencyCatalog } from '../domain/currencies'
 import { assetGroupOf, holdingValueSar, ownerHoldingValueSar, ownerQuantity, ownerWeightedAverageCostSar } from '../domain/finance'
 import { holdingUnrealizedGainLossSar, ownerHoldingCostBasisSar } from '../domain/lifecycle'
 import { fetchMarketQuote } from '../data/marketData'
 import { SELF_ID } from '../data/seed'
-import type { Account, AccountGroup, Holding } from '../domain/types'
+import type { AccountGroup, AccountKind, AssetKind, Holding } from '../domain/types'
 import '../reporting-currency.css'
 
 const money = new Intl.NumberFormat('ar-SA', { maximumFractionDigits: 4 })
+const num = (v: string) => Number(v.replace(/,/g, ''))
 type Lens = 'custom' | 'owner' | 'asset'
+const kindOptions: { value: AssetKind; label: string }[] = [
+  { value:'cash', label:'نقد / حساب نقدي' }, { value:'metal', label:'معادن' }, { value:'stock', label:'أسهم' }, { value:'fund', label:'صناديق' }, { value:'crypto', label:'عملات رقمية' }, { value:'real_estate', label:'عقار' }, { value:'vehicle', label:'مركبة' }, { value:'fixed_term', label:'استثمار لأجل' }, { value:'receivable', label:'ذمة / مطالبة' }, { value:'collectible', label:'مقتنيات' }, { value:'other', label:'أصل آخر' },
+]
+const cashStyles: { value: AccountKind; label: string }[] = [
+  {value:'checking',label:'جاري'}, {value:'saving',label:'ادخار'}, {value:'cash_container',label:'نقد فعلي / خزنة'}, {value:'investment',label:'رصيد استثماري'}, {value:'prepaid',label:'مسبق الدفع'}, {value:'fixed_term',label:'لأجل'},
+]
 
 export function Assets() {
-  const finance = useFinance()
-  const toast = useToast()
-  const { state } = finance
-  const [reportingCurrency, setReportingCurrency] = useReportingCurrency()
-  const [lens, setLens] = useState<Lens>('custom')
-  const [expanded, setExpanded] = useState<Set<string>>(new Set())
-  const [refreshingId, setRefreshingId] = useState<string | null>(null)
-
-  const activeGroups = (state.accountGroups ?? []).filter(g => g.status === 'active')
-  const activeAccounts = state.accounts.filter(a => a.status === 'active')
-  const activeHoldings = state.holdings.filter(h => !h.archived && h.quantity > 0)
-  const roots = useMemo(() => activeGroups.filter(g => !g.parentId || !activeGroups.some(p => p.id === g.parentId)), [activeGroups])
-  const displayValue = (valueSar: number) => formatReportingValue(valueSar, reportingCurrency)
-
-  const lensGroups = useMemo(() => {
-    const map = new Map<string, Holding[]>()
-    activeHoldings.forEach(h => {
-      const keys = lens === 'owner'
-        ? h.ownership.filter(s => s.quantity > 0).map(s => state.parties.find(p => p.id === s.ownerId)?.name ?? s.ownerId)
-        : [groupName(assetGroupOf(h.kind))]
-      keys.forEach(k => map.set(k, [...(map.get(k) ?? []), h]))
-    })
-    return [...map.entries()]
-  }, [state, lens, activeHoldings])
-
-  const toggle = (id: string) => setExpanded(prev => { const next = new Set(prev); next.has(id) ? next.delete(id) : next.add(id); return next })
+  const finance = useFinance(); const toast = useToast(); const { state } = finance
+  const [reportingCurrency,setReportingCurrency]=useReportingCurrency(); const [lens,setLens]=useState<Lens>('custom'); const [expanded,setExpanded]=useState<Set<string>>(new Set()); const [refreshingId,setRefreshingId]=useState<string|null>(null); const [editing,setEditing]=useState<Holding|null>(null)
+  const activeGroups=(state.accountGroups??[]).filter(g=>g.status==='active'); const assets=state.holdings.filter(h=>!h.archived); const valuedAssets=assets.filter(h=>h.quantity>0); const roots=useMemo(()=>activeGroups.filter(g=>!g.parentId||!activeGroups.some(p=>p.id===g.parentId)),[activeGroups]); const display=(v:number)=>formatReportingValue(v,reportingCurrency)
+  const toggle=(id:string)=>setExpanded(prev=>{const n=new Set(prev);n.has(id)?n.delete(id):n.add(id);return n})
+  const lensGroups=useMemo(()=>{const map=new Map<string,Holding[]>();valuedAssets.forEach(h=>{const keys=lens==='owner'?h.ownership.filter(s=>s.quantity>0).map(s=>state.parties.find(p=>p.id===s.ownerId)?.name??s.ownerId):[groupName(assetGroupOf(h.kind))];keys.forEach(k=>map.set(k,[...(map.get(k)??[]),h]))});return [...map.entries()]},[state,lens,valuedAssets])
 
   return <div className="page-stack">
-    <section className="section-intro"><div><span className="eyebrow">GROUP → ACCOUNT → HOLDING</span><h2>الأصول والحسابات</h2><p>الرصيد يبقى بعملته الأصلية داخل الحساب، بينما إجماليات الحسابات والمجموعات تُحوّل إلى عملة العرض الرئيسية. تغيير عملة العرض لا ينشئ حركة مالية.</p></div><div className="assets-view-controls"><label className="reporting-currency-control"><span>عملة العرض الرئيسية</span><select value={reportingCurrency} onChange={e => setReportingCurrency(e.target.value)}>{reportingCurrencyCatalog.map(currency => <option key={currency.code} value={currency.code}>{currency.code} — {currency.label}</option>)}</select></label><div className="segmented"><button className={lens === 'custom' ? 'active' : ''} onClick={() => setLens('custom')}>مجموعاتي</button><button className={lens === 'owner' ? 'active' : ''} onClick={() => setLens('owner')}>المالك</button><button className={lens === 'asset' ? 'active' : ''} onClick={() => setLens('asset')}>نوع الأصل</button></div></div></section>
-
-    {lens === 'custom' ? <CustomTree/> : lensGroups.length === 0 ? <section className="tree-panel"><EmptyState/></section> : <section className="tree-panel">{lensGroups.map(([group, holdings]) => {
-      const key = `lens-${group}`
-      const isOpen = expanded.has(key)
-      const value = holdings.reduce((sum, h) => lens === 'owner' ? sum + ownerHoldingValueSar(h, state.parties.find(p => p.name === group)?.id ?? '') : sum + holdingValueSar(h), 0)
-      return <div className="tree-group" key={group}><button className="tree-header" onClick={() => toggle(key)}><div className="tree-title"><div className="tree-avatar"><UserRoundCheck size={19}/></div><div><strong>{group}</strong><span>{holdings.length} حيازات</span></div></div><div className="tree-summary"><strong>{displayValue(value)}</strong>{isOpen ? <ChevronDown/> : <ChevronLeft/>}</div></button>{isOpen && <div className="tree-children">{lens === 'owner' ? renderOwnerAssetTree(group, holdings) : holdings.map(h => <HoldingCard key={h.id} h={h}/>)}</div>}</div>
-    })}</section>}
+    <section className="section-intro"><div><span className="eyebrow">GROUP → ASSET</span><h2>الأصول</h2><p>المجموعة هي الحاوية التنظيمية الوحيدة. كل عنصر مالي تملكه هو أصل مستقل يمكن إعادة تسميته ونقله وتصحيح بياناته أو حذفه بأمان.</p></div><div className="assets-view-controls"><label className="reporting-currency-control"><span>عملة العرض الرئيسية</span><select value={reportingCurrency} onChange={e=>setReportingCurrency(e.target.value)}>{reportingCurrencyCatalog.map(c=><option key={c.code} value={c.code}>{c.code} — {c.label}</option>)}</select></label><div className="segmented"><button className={lens==='custom'?'active':''} onClick={()=>setLens('custom')}>مجموعاتي</button><button className={lens==='owner'?'active':''} onClick={()=>setLens('owner')}>المالك</button><button className={lens==='asset'?'active':''} onClick={()=>setLens('asset')}>نوع الأصل</button></div></div></section>
+    {lens==='custom'?<CustomTree/>:lensGroups.length===0?<section className="tree-panel"><EmptyState/></section>:<section className="tree-panel">{lensGroups.map(([group,items])=>{const key=`lens-${group}`;const open=expanded.has(key);const value=items.reduce((sum,h)=>lens==='owner'?sum+ownerHoldingValueSar(h,state.parties.find(p=>p.name===group)?.id??''):sum+holdingValueSar(h),0);return <div className="tree-group" key={group}><button className="tree-header" onClick={()=>toggle(key)}><div className="tree-title"><div className="tree-avatar"><UserRoundCheck size={19}/></div><div><strong>{group}</strong><span>{items.length} أصول</span></div></div><div className="tree-summary"><strong>{display(value)}</strong>{open?<ChevronDown/>:<ChevronLeft/>}</div></button>{open&&<div className="tree-children">{items.map(h=><AssetCard key={h.id} h={h}/>)}</div>}</div>})}</section>}
+    {editing&&<AssetEditor asset={editing} groups={activeGroups} onClose={()=>setEditing(null)} onSave={(payload)=>{try{finance.updateAsset(payload);toast.success(`تم تصحيح «${payload.name}» وحفظ البيانات.`);setEditing(null)}catch(e){toast.error(e instanceof Error?e.message:'تعذر حفظ الأصل')}}}/>} 
   </div>
 
-  function CustomTree() {
-    const ungrouped = activeAccounts.filter(a => !a.groupId || !activeGroups.some(g => g.id === a.groupId))
-    if (activeAccounts.length === 0) return <section className="tree-panel"><div className="empty-preview"><WalletCards/><strong>لا توجد حسابات بعد</strong><span>أنشئ حسابًا مباشرة. تستطيع وضعه في مجموعة مثل «البنوك» أو تركه بلا مجموعة.</span></div></section>
-    return <section className="tree-panel">
-      {roots.map(group => <GroupBranch key={group.id} group={group}/>) }
-      {ungrouped.length > 0 && <div className="tree-group"><button className="tree-header" onClick={() => toggle('ungrouped')}><div className="tree-title"><div className="tree-avatar"><FolderTree size={19}/></div><div><strong>بدون مجموعة</strong><span>{ungrouped.length} حساب</span></div></div><div className="tree-summary"><strong>{displayValue(accountsValue(ungrouped))}</strong>{expanded.has('ungrouped') ? <ChevronDown/> : <ChevronLeft/>}</div></button>{expanded.has('ungrouped') && <div className="tree-children place-accounts">{ungrouped.map(account => <AccountBranch key={account.id} account={account}/>)}</div>}</div>}
-    </section>
-  }
+  function CustomTree(){const ungrouped=assets.filter(a=>!a.groupId||!activeGroups.some(g=>g.id===a.groupId));if(!assets.length)return <section className="tree-panel"><EmptyState/></section>;return <section className="tree-panel">{roots.map(g=><GroupBranch key={g.id} group={g}/>)}{ungrouped.length>0&&<div className="tree-group"><button className="tree-header" onClick={()=>toggle('ungrouped')}><div className="tree-title"><div className="tree-avatar"><FolderTree size={19}/></div><div><strong>بدون مجموعة</strong><span>{ungrouped.length} أصل</span></div></div><div className="tree-summary"><strong>{display(ungrouped.reduce((s,a)=>s+holdingValueSar(a),0))}</strong>{expanded.has('ungrouped')?<ChevronDown/>:<ChevronLeft/>}</div></button>{expanded.has('ungrouped')&&<div className="tree-children">{ungrouped.map(a=><AssetCard key={a.id} h={a}/>)}</div>}</div>}</section>}
+  function GroupBranch({group}:{group:AccountGroup}){const children=activeGroups.filter(g=>g.parentId===group.id);const direct=assets.filter(a=>a.groupId===group.id);const desc=descendants(group.id);const all=assets.filter(a=>a.groupId&&desc.has(a.groupId));const key=`group-${group.id}`;const open=expanded.has(key);return <div className="tree-group place-tree-group"><button className="tree-header" onClick={()=>toggle(key)}><div className="tree-title"><div className="tree-avatar"><FolderTree size={19}/></div><div><strong>{group.name}</strong><span>{direct.length} أصل مباشر • {children.length} مجموعات فرعية</span></div></div><div className="tree-summary"><strong>{display(all.reduce((s,a)=>s+holdingValueSar(a),0))}</strong>{open?<ChevronDown/>:<ChevronLeft/>}</div></button>{open&&<div className="tree-children">{direct.map(a=><AssetCard key={a.id} h={a}/>)}{children.map(c=><GroupBranch key={c.id} group={c}/>)}</div>}</div>}
+  function descendants(id:string){const r=new Set<string>([id]);const walk=(x:string)=>activeGroups.filter(g=>g.parentId===x).forEach(g=>{if(!r.has(g.id)){r.add(g.id);walk(g.id)}});walk(id);return r}
 
-  function GroupBranch({ group }: { group: AccountGroup }) {
-    const children = activeGroups.filter(g => g.parentId === group.id)
-    const directAccounts = activeAccounts.filter(a => a.groupId === group.id)
-    const descendantIds = groupDescendants(group.id)
-    const accounts = activeAccounts.filter(a => a.groupId && descendantIds.has(a.groupId))
-    const key = `group-${group.id}`
-    const isOpen = expanded.has(key)
-    return <div className="tree-group place-tree-group">
-      <button className="tree-header" onClick={() => toggle(key)}><div className="tree-title"><div className="tree-avatar"><FolderTree size={19}/></div><div><strong>{group.name}</strong><span>{directAccounts.length} حساب مباشر • {children.length} مجموعات فرعية</span></div></div><div className="tree-summary"><strong>{displayValue(accountsValue(accounts))}</strong>{isOpen ? <ChevronDown/> : <ChevronLeft/>}</div></button>
-      {isOpen && <div className="tree-children place-accounts">{directAccounts.map(account => <AccountBranch key={account.id} account={account}/>)}{children.map(child => <GroupBranch key={child.id} group={child}/>)}</div>}
-    </div>
-  }
-
-  function AccountBranch({ account }: { account: Account }) {
-    const holdings = activeHoldings.filter(h => h.accountId === account.id)
-    const value = holdings.reduce((sum, h) => sum + holdingValueSar(h), 0)
-    const key = `account-${account.id}`
-    const isOpen = expanded.has(key)
-    return <section className="account-branch"><button className="account-branch-head" onClick={() => toggle(key)}><div><WalletCards size={17}/><span><strong>{account.name}</strong><small>{accountKindName(account.kind)}{account.currency ? ` • ${account.currency}` : ''}</small></span></div><span className="account-head-value"><strong>{displayValue(value)}</strong>{isOpen ? <ChevronDown size={16}/> : <ChevronLeft size={16}/>}</span></button>{isOpen && (holdings.length ? <div className="account-holdings">{holdings.map(h => <HoldingCard key={h.id} h={h}/>)}</div> : <div className="place-empty-accounts">الحساب موجود ورصيده صفر.</div>)}</section>
-  }
-
-  function groupDescendants(rootId: string): Set<string> {
-    const result = new Set<string>([rootId])
-    const walk = (id: string) => activeGroups.filter(g => g.parentId === id).forEach(g => { if (!result.has(g.id)) { result.add(g.id); walk(g.id) } })
-    walk(rootId); return result
-  }
-  function accountsValue(accounts: Account[]) { return activeHoldings.filter(h => accounts.some(a => a.id === h.accountId)).reduce((sum, h) => sum + holdingValueSar(h), 0) }
-
-  function renderOwnerAssetTree(ownerName: string, holdings: Holding[]) {
-    const byGroup = new Map<string, Holding[]>()
-    holdings.forEach(h => { const key = groupName(assetGroupOf(h.kind)); byGroup.set(key, [...(byGroup.get(key) ?? []), h]) })
-    return [...byGroup.entries()].map(([assetGroup, groupHoldings]) => <div className="asset-subgroup" key={`${ownerName}-${assetGroup}`}><div className="asset-subgroup-title"><span>{assetGroup}</span><strong>{displayValue(ownerValue(ownerName, groupHoldings))}</strong></div>{groupHoldings.map(h => <HoldingCard key={h.id} h={h}/>)}</div>)
-  }
-  function ownerValue(ownerName: string, holdings: Holding[]) { const party = state.parties.find(p => p.name === ownerName); return holdings.reduce((sum, h) => sum + (party ? ownerHoldingValueSar(h, party.id) : 0), 0) }
-
-  async function refreshQuote(h: Holding) {
-    const def = assetTypeById(h.assetTypeId)
-    if (!def || !['crypto', 'metal', 'security'].includes(def.quoteStrategy)) return
-    setRefreshingId(h.id)
-    try {
-      const quote = await fetchMarketQuote({ assetTypeId: def.id, symbol: h.symbol, quoteStrategy: def.quoteStrategy })
-      if (!quote) { toast.info('لم يتوفر سعر من مزود السوق لهذا الأصل الآن. بقي آخر تقييم محفوظ.'); return }
-      finance.updateHoldingQuote(h.id, quote); toast.success(`تم تحديث سعر «${h.name}» من ${quote.source}.`)
-    } catch (error) { toast.error(error instanceof Error ? error.message : 'تعذر تحديث السعر') }
-    finally { setRefreshingId(null) }
-  }
-
-  function HoldingCard({ h }: { h: Holding }) {
-    const account = state.accounts.find(a => a.id === h.accountId)
-    const ownerText = h.ownership.filter(s => s.quantity > 0).map(s => `${state.parties.find(p => p.id === s.ownerId)?.name}: ${s.quantity.toLocaleString('ar-SA')} ${h.nativeUnit}`).join(' • ')
-    const ownQty = ownerQuantity(h, SELF_ID)
-    const avgCost = ownQty > 0 ? ownerWeightedAverageCostSar(h, SELF_ID) : null
-    const costBasis = ownQty > 0 ? ownerHoldingCostBasisSar(h, SELF_ID) : null
-    const unrealized = ownQty > 0 && h.kind !== 'cash' ? holdingUnrealizedGainLossSar(h, SELF_ID) : null
-    const returnPct = unrealized != null && costBasis != null && costBasis > 0 ? unrealized / costBasis * 100 : null
-    const def = assetTypeById(h.assetTypeId)
-    const canRefresh = !!def && ['crypto', 'metal', 'security'].includes(def.quoteStrategy)
-    const unitValueSar = holdingUnitValueSar(h)
-    const currency = h.kind === 'cash' ? currencyByCode(h.symbol) : undefined
-    return <div className="holding-card"><div className="holding-main"><div className="asset-icon large">{h.symbol}</div><div><strong>{h.name}</strong><span>{account?.name ?? 'حساب غير معروف'} • {kindName(h.kind)}</span></div></div><div className="holding-qty"><strong>{h.quantity.toLocaleString('ar-SA')} {h.nativeUnit}</strong><span>≈ {displayValue(holdingValueSar(h))}</span></div><div className="holding-meta"><span><UserRoundCheck size={15}/> {ownerText || '—'}</span>{h.location && <span><MapPin size={15}/> {h.location}</span>}{h.kind === 'cash' && h.symbol !== 'SAR' && <span>سعر الصرف المستخدم: 1 {h.symbol} = {money.format(unitValueSar)} ر.س{currency?.referenceSar != null ? ' • مرجع تلقائي' : ''}</span>}{avgCost != null && <span>متوسط التكلفة: {displayValue(avgCost)} / {h.nativeUnit}</span>}{costBasis != null && <span>Cost Basis الحالي: {displayValue(costBasis)}</span>}{unrealized != null && <span className={unrealized >= 0 ? 'profit' : 'loss'}>غير محقق: {unrealized >= 0 ? '+' : ''}{displayValue(unrealized)} {returnPct != null ? `(${returnPct >= 0 ? '+' : ''}${returnPct.toFixed(2)}%)` : ''}</span>}<span>التقييم الحالي: {displayValue(unitValueSar)} / {h.nativeUnit} • {valuationName(h.valuationMethod)}</span><span>المصدر: {h.kind === 'cash' && currency?.referenceSar != null ? 'مرجع العملة' : h.valuationSource || 'غير محدد'}{h.valuedAt ? ` • ${new Date(h.valuedAt).toLocaleString('ar-SA')}` : ''}</span>{h.kind !== 'cash' && <span>النتيجة غير محققة حتى البيع أو التسييل الحقيقي.</span>}</div>{canRefresh && <button className="ghost holding-refresh" onClick={() => refreshQuote(h)} disabled={refreshingId === h.id}><RefreshCcw size={14}/> {refreshingId === h.id ? 'جاري التحديث…' : 'تحديث السعر'}</button>}</div>
-  }
+  async function refresh(h:Holding){const def=assetTypeById(h.assetTypeId);if(!def||!['crypto','metal','security'].includes(def.quoteStrategy))return;setRefreshingId(h.id);try{const quote=await fetchMarketQuote({assetTypeId:def.id,symbol:h.symbol,quoteStrategy:def.quoteStrategy});if(!quote){toast.info('لم يتوفر سعر جديد؛ بقي آخر تقييم محفوظ.');return}finance.updateHoldingQuote(h.id,quote);toast.success(`تم تحديث «${h.name}».`)}catch(e){toast.error(e instanceof Error?e.message:'تعذر تحديث السعر')}finally{setRefreshingId(null)}}
+  function AssetCard({h}:{h:Holding}){const ownerText=h.ownership.filter(s=>s.quantity>0).map(s=>`${state.parties.find(p=>p.id===s.ownerId)?.name}: ${s.quantity.toLocaleString('ar-SA')} ${h.nativeUnit}`).join(' • ');const ownQty=ownerQuantity(h,SELF_ID);const avg=ownQty>0?ownerWeightedAverageCostSar(h,SELF_ID):null;const basis=ownQty>0?ownerHoldingCostBasisSar(h,SELF_ID):null;const unrl=ownQty>0&&h.kind!=='cash'?holdingUnrealizedGainLossSar(h,SELF_ID):null;const def=assetTypeById(h.assetTypeId);const canRefresh=!!def&&['crypto','metal','security'].includes(def.quoteStrategy);const unit=holdingUnitValueSar(h);const currency=h.kind==='cash'?currencyByCode(h.symbol):undefined;return <div className="holding-card"><div className="holding-main"><div className="asset-icon large">{h.symbol}</div><div><strong>{h.name}</strong><span>{kindName(h.kind)}{h.institutionName?` • ${h.institutionName}`:''}{h.last4?` • •••• ${h.last4}`:''}</span></div></div><div className="holding-qty"><strong>{h.quantity.toLocaleString('ar-SA')} {h.nativeUnit}</strong><span>≈ {display(holdingValueSar(h))}</span></div><div className="holding-meta"><span><UserRoundCheck size={15}/> {ownerText||'لا كمية حالية'}</span>{h.location&&<span><MapPin size={15}/> {h.location}</span>}{h.description&&<span>{h.description}</span>}{h.kind==='cash'&&h.symbol!=='SAR'&&<span>1 {h.symbol} = {money.format(unit)} ر.س{currency?.referenceSar!=null?' • مرجع تلقائي':''}</span>}{avg!=null&&<span>متوسط التكلفة: {display(avg)} / {h.nativeUnit}</span>}{basis!=null&&<span>Cost Basis: {display(basis)}</span>}{unrl!=null&&<span className={unrl>=0?'profit':'loss'}>غير محقق: {unrl>=0?'+':''}{display(unrl)}</span>}<span>التقييم: {display(unit)} / {h.nativeUnit}</span></div><div className="category-node-actions"><button title="تعديل كامل" onClick={()=>setEditing(h)}><Pencil size={14}/></button><button title="حذف / إلغاء" onClick={()=>{const why=window.prompt(`سبب حذف «${h.name}»؟ سيتم عكس الأثر المالي الممكن وحفظ Audit.`);if(!why)return;try{finance.deleteAsset(h.id,why);toast.success(`تم حذف/إلغاء «${h.name}» بأمان.`)}catch(e){toast.error(e instanceof Error?e.message:'تعذر حذف الأصل')}}}><Trash2 size={14}/></button>{canRefresh&&<button title="تحديث السعر" onClick={()=>refresh(h)} disabled={refreshingId===h.id}><RefreshCcw size={14}/></button>}</div></div>}
 }
 
-function EmptyState() { return <div className="empty-preview"><WalletCards/><strong>لا توجد أصول أو أرصدة بعد</strong><span>أنشئ حسابًا، ثم أضف رصيدًا أو أصلًا قائمًا أو نفّذ شراء.</span></div> }
-function groupName(group: string) { return ({ cash_and_equivalents: 'النقد وما في حكمه', investments: 'الاستثمارات', real_estate: 'العقارات', other: 'أصول أخرى' } as Record<string, string>)[group] ?? group }
-function kindName(kind: string) { return ({ cash: 'نقد وعملات', metal: 'ذهب وفضة ومعادن', collectible: 'مقتنيات', fund: 'صناديق', stock: 'أسهم', crypto: 'عملات رقمية', real_estate: 'عقارات', vehicle: 'مركبات', fixed_term: 'استثمارات لأجل', receivable: 'ذمم ومطالبات', other: 'أخرى' } as Record<string, string>)[kind] ?? kind }
-function valuationName(method: string) { return ({ nominal: 'اسمي', fx: 'صرف عملة', market_quote: 'سوقي', manual_appraisal: 'تقييم يدوي', contractual: 'تعاقدي', cost_fallback: 'مؤقت من تكلفة الاقتناء', unvalued: 'غير مقيم' } as Record<string, string>)[method] ?? method }
-function accountKindName(kind: string) { return ({ checking: 'جاري', saving: 'ادخار', investment: 'استثمار', cash_container: 'خزنة/حاوية', prepaid: 'مسبق الدفع', custody: 'حفظ أصول', fixed_term: 'لأجل', credit_card: 'بطاقة ائتمان' } as Record<string, string>)[kind] ?? kind }
+function AssetEditor({asset,groups,onClose,onSave}:{asset:Holding;groups:AccountGroup[];onClose:()=>void;onSave:(input:any)=>void}){
+  const finance=useFinance();const owners=finance.state.parties.filter(p=>p.type==='self'||p.type==='person');const initialOwner=asset.ownership.find(x=>x.quantity>0)?.ownerId??SELF_ID
+  const [name,setName]=useState(asset.name);const [kind,setKind]=useState<AssetKind>(asset.kind);const [symbol,setSymbol]=useState(asset.symbol);const [unit,setUnit]=useState(asset.nativeUnit);const [quantity,setQuantity]=useState(String(asset.quantity));const [market,setMarket]=useState(String(asset.marketPriceSar));const [cost,setCost]=useState(String(asset.costLots.reduce((s,l)=>s+l.quantity*(l.unitCostSar??0),0)));const [owner,setOwner]=useState(initialOwner);const [groupId,setGroup]=useState(asset.groupId??'');const [currency,setCurrency]=useState(asset.currency??asset.symbol);const [accountKind,setAccountKind]=useState<AccountKind>(asset.accountKind??'checking');const [last4,setLast4]=useState(asset.last4??'');const [institution,setInstitution]=useState(asset.institutionName??'');const [location,setLocation]=useState(asset.location??'');const [description,setDescription]=useState(asset.description??'');const [reason,setReason]=useState('تصحيح بيانات أدخلتها سابقًا')
+  const submit=(e:FormEvent)=>{e.preventDefault();onSave({id:asset.id,name,kind,assetTypeId:asset.assetTypeId,symbol,nativeUnit:unit,ownerId:owner,quantity:num(quantity),marketPriceSar:num(market),costBasisSar:cost.trim()?num(cost):undefined,groupId:groupId||undefined,accountKind:kind==='cash'?accountKind:undefined,currency:kind==='cash'?currency:undefined,last4:last4||undefined,institutionName:institution||undefined,description:description||undefined,location:location||undefined,performanceRole:asset.performanceRole,reason})}
+  return <div className="modal-backdrop" onMouseDown={e=>{if(e.target===e.currentTarget)onClose()}}><section className="expense-modal category-modal" role="dialog" aria-modal="true"><button className="modal-close" onClick={onClose}><X size={18}/></button><div className="panel-head"><div><span>تصحيح الأصل</span><h2>{asset.name}</h2><span>يمكنك تعديل الاسم والتموضع والمالك والكمية والتكلفة والتقييم والمعلومات الوصفية.</span></div></div><form className="trade-form" onSubmit={submit}><GroupCascader groups={groups} value={groupId} onChange={setGroup} label="التموضع"/><div className="field-grid"><label><span>الاسم</span><input value={name} onChange={e=>setName(e.target.value)}/></label><label><span>النوع</span><select value={kind} onChange={e=>setKind(e.target.value as AssetKind)}>{kindOptions.map(x=><option key={x.value} value={x.value}>{x.label}</option>)}</select></label></div><div className="field-grid"><label><span>المالك</span><select value={owner} onChange={e=>setOwner(e.target.value)}>{owners.map(o=><option key={o.id} value={o.id}>{o.name}</option>)}</select></label><label><span>الكمية / الرصيد</span><input value={quantity} onChange={e=>setQuantity(e.target.value)} inputMode="decimal"/></label></div><div className="field-grid three"><label><span>الرمز</span><input value={symbol} onChange={e=>setSymbol(e.target.value.toUpperCase())}/></label><label><span>الوحدة</span><input value={unit} onChange={e=>setUnit(e.target.value)}/></label><label><span>القيمة الحالية للوحدة بالريال</span><input value={market} onChange={e=>setMarket(e.target.value)} inputMode="decimal"/></label></div><label><span>Cost Basis الكلي</span><input value={cost} onChange={e=>setCost(e.target.value)} inputMode="decimal"/></label>{kind==='cash'&&<><div className="field-grid three"><label><span>العملة</span><select value={currency} onChange={e=>{setCurrency(e.target.value);setSymbol(e.target.value);setUnit(e.target.value)}}>{currencyCatalog.map(c=><option key={c.code} value={c.code}>{c.code} — {c.label}</option>)}</select></label><label><span>طبيعة الأصل النقدي</span><select value={accountKind} onChange={e=>setAccountKind(e.target.value as AccountKind)}>{cashStyles.map(x=><option key={x.value} value={x.value}>{x.label}</option>)}</select></label><label><span>آخر 4 أرقام</span><input value={last4} onChange={e=>setLast4(e.target.value.replace(/\D/g,'').slice(0,4))}/></label></div><label><span>البنك / المؤسسة</span><input value={institution} onChange={e=>setInstitution(e.target.value)}/></label></>}<div className="field-grid"><label><span>الموقع</span><input value={location} onChange={e=>setLocation(e.target.value)}/></label><label><span>الوصف</span><input value={description} onChange={e=>setDescription(e.target.value)}/></label></div><label><span>سبب التصحيح</span><input required value={reason} onChange={e=>setReason(e.target.value)}/></label><button className="primary wide" type="submit">حفظ التصحيح</button></form></section></div>
+}
+
+function EmptyState(){return <div className="empty-preview"><WalletCards/><strong>لا توجد أصول بعد</strong><span>أنشئ أصلًا نقديًا أو معدنًا أو عقارًا أو أي أصل آخر، وضعه في المجموعة التي تختارها.</span></div>}
+function groupName(g:string){return({cash_and_equivalents:'النقد وما في حكمه',investments:'الاستثمارات',real_estate:'العقارات',other:'أصول أخرى'} as Record<string,string>)[g]??g}
+function kindName(k:string){return({cash:'نقد وعملات',metal:'معادن',collectible:'مقتنيات',fund:'صندوق',stock:'سهم',crypto:'عملات رقمية',real_estate:'عقار',vehicle:'مركبة',fixed_term:'استثمار لأجل',receivable:'ذمة / مطالبة',other:'أصل آخر'} as Record<string,string>)[k]??k}
