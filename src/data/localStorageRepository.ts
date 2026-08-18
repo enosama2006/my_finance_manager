@@ -28,11 +28,11 @@ export function parseLegacyLocalStorageState(raw: string): FinanceState | null {
 
 export function createLocalStorageFinanceRepository(storage: Storage = window.localStorage): FinanceRepository {
   return {
-    load() {
+    async load() {
       const raw = storage.getItem(LEGACY_STORAGE_KEY)
       return raw ? parseLegacyLocalStorageState(raw) : null
     },
-    save(state) { storage.setItem(LEGACY_STORAGE_KEY, JSON.stringify(state)) },
-    clear() { storage.removeItem(LEGACY_STORAGE_KEY) },
+    async save(state) { storage.setItem(LEGACY_STORAGE_KEY, JSON.stringify(state)) },
+    async clear() { storage.removeItem(LEGACY_STORAGE_KEY) },
   }
 }
