@@ -1,57 +1,70 @@
 # SCN-014 — Audited Transaction Correction
 
-Status: **Implemented Prototype evidence / Approved audit direction**
+Status: **Approved correction invariant / Partially implemented across schema-v5 transaction families**
 Date: 2026-08-18
 
 ## Intent
-A user notices that a posted movement has the wrong date, title, note, expense category, beneficiary, or necessity classification and expects to correct it from the Activity/Ledger screen without deleting history.
+A user may discover that any field they entered is wrong and expects to correct it without fabricating a second real-world event or corrupting balances.
 
 ## Approved invariant
-A correction is not a second real-world financial event.
+A correction is not a second economic event.
 
-The same Logical Transaction ID remains. Each correction increments `version` and stores the previous state as a `TransactionRevision` with a mandatory reason and timestamp.
+```text
+Reverse old projection
+→ Apply corrected user intent
+→ Keep same LogicalTransaction ID
+→ Increment version
+→ Preserve previous version as TransactionRevision
+```
 
-## Prototype-safe editable fields
-For all posted transactions:
-- title;
-- date/time;
-- note.
+A real later refund/reversal remains a separate linked Transaction because it actually happened later.
 
-For expenses additionally:
-- ExpenseCategory;
-- ExpenseBeneficiary;
-- ExpenseNecessity.
+## Non-financial correction
+Fields such as title, date/time, note, category, beneficiary and necessity can be revised without changing Asset quantities or Cost Basis when their semantics are non-financial.
 
-These fields can be revised without changing posted asset quantities, ownership, cost basis, or portfolio consumption.
+## Financial correction
+Schema-v5 prototype work has superseded the old schema-v4 rule that all financial fields are permanently locked.
 
-## Financial-effect fields — current schema-v4 limitation
-The prototype MUST NOT silently edit:
-- amount/value;
-- source Holding/Account;
-- target Holding/Account;
-- source/target quantities;
-- exchange rate;
-- fees;
-- Portfolio funding source/consumption;
-- realized P/L;
-- purchase/sale/conversion economic legs.
+For transaction kinds with a deterministic replay engine, user-entered financial fields may be corrected by reversing the old projection and replaying the corrected one.
 
-Reason: schema-v4 does not persist a complete reversible projection journal for every downstream effect (cost lots, portfolio slice consumption, positions/cycles, and later dependent transactions). Mutating those values in-place could make balances disagree with the Ledger.
+Examples already covered or partially covered in the prototype include:
+- opening state;
+- income;
+- expense;
+- real transfer;
+- asset purchase;
+- some conversion/allocation flows.
 
-The final target implementation should support atomic correction by reverting the old projection and replaying the corrected Logical Transaction and all dependent projections, or by deriving state from normalized transaction legs/event projections.
+The exact coverage is implementation status, not a limitation of the product principle.
+
+## Safety boundary
+If a transaction has downstream dependent effects that cannot yet be reversed losslessly, MyFinMan must refuse a local destructive edit and explain that sequential replay is required.
+
+It must never mutate only the Ledger row while leaving:
+- Asset quantity;
+- OwnershipShares;
+- CostBasisLots;
+- Portfolio allocations;
+- Positions/CapitalCycles;
+- Claims/Liabilities;
+- realized P/L
+in the old state.
+
+## Repeated-purchase refinement
+Under ADR-005, one Asset may have several purchase transactions/lots. Correcting one purchase must reverse/replay **that purchase lot and its dependent allocation effects only**, not erase or rebuild unrelated later purchase lots incorrectly.
 
 ## UX
-- Pencil action on each Ledger card.
-- Responsive Modal/Sheet opens over the current list.
-- Financial fields are visible but locked with an explanation.
-- A correction reason is mandatory.
-- Prior revisions are visible in the same dialog.
-- Saving creates `vN+1` while retaining the same transaction ID.
+- edit control on user-created transactions;
+- responsive modal/sheet;
+- reason required;
+- prior revisions visible;
+- unsupported dependent-chain correction gives explicit refusal, never silent partial mutation.
 
 ## Acceptance
-1. Changing an expense beneficiary does not change cash balance.
-2. Changing a category does not change amount or source Holding.
-3. Same transaction ID survives every correction.
-4. Every prior version is retained.
-5. Correction requires a reason.
-6. Unsupported financial-effect edits cannot be performed through the safe editor.
+1. Same LogicalTransaction ID survives corrections.
+2. Every prior version remains auditable.
+3. Correction requires a reason.
+4. Non-financial correction does not change financial projections.
+5. Supported financial correction reverses old effects and replays corrected effects atomically.
+6. Unsupported downstream chain is refused rather than partially mutated.
+7. Correcting one repeated purchase preserves other purchase lots and transactions.
