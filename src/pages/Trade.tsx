@@ -2,79 +2,16 @@ import { ArrowLeftRight, Calculator, TriangleAlert } from 'lucide-react'
 import { useMemo, useState } from 'react'
 import { useFinance } from '../application/store'
 import { previewManagedConversion } from '../application/conversionPolicy'
+import { GroupCascader } from '../components/GroupCascader'
 import { useToast } from '../components/ToastProvider'
 import { availableQuantity } from '../domain/finance'
 import type { AssetKind, ConversionInput } from '../domain/types'
 import { SELF_ID } from '../data/seed'
 
-const money = new Intl.NumberFormat('ar-SA', { maximumFractionDigits: 2 })
-
-export function Trade() {
-  const { state, convert } = useFinance()
-  const toast = useToast()
-  const ownHoldings = state.holdings.filter(h => (h.ownership.find(s => s.ownerId === SELF_ID)?.quantity ?? 0) > 0 && !h.archived)
-  const [sourceId, setSourceId] = useState(ownHoldings[0]?.id ?? '')
-  const [sourcePortfolioId, setSourcePortfolioId] = useState('')
-  const [sourceQty, setSourceQty] = useState('100')
-  const [targetSymbol, setTargetSymbol] = useState('SAR')
-  const [targetName, setTargetName] = useState('ريال سعودي')
-  const [targetKind, setTargetKind] = useState<AssetKind>('cash')
-  const [targetUnit, setTargetUnit] = useState('ر.س')
-  const [targetQty, setTargetQty] = useState('100')
-  const [targetUnitValue, setTargetUnitValue] = useState('1')
-  const [fees, setFees] = useState('0')
-  const [targetAccountId, setTargetAccountId] = useState(state.accounts.find(a => a.kind !== 'credit_card')?.id ?? '')
-  const [targetPortfolioId, setTargetPortfolioId] = useState('')
-
-  const source = state.holdings.find(h => h.id === sourceId)
-  const sourcePortfolioOptions = state.portfolioSlices.filter(s => s.holdingId === sourceId && s.ownerId === SELF_ID).map(s => state.portfolios.find(p => p.id === s.portfolioId)).filter(Boolean)
-  const selectedAccount = state.accounts.find(a => a.id === targetAccountId)
-
-  const input: ConversionInput = {
-    sourceHoldingId: sourceId,
-    sourcePortfolioId: sourcePortfolioId || undefined,
-    targetPortfolioId: targetPortfolioId || sourcePortfolioId || undefined,
-    targetSymbol, targetName, targetKind, targetUnit,
-    sourceQuantity: Number(sourceQty) || 0,
-    targetQuantity: Number(targetQty) || 0,
-    targetUnitValueSarAtExecution: Number(targetUnitValue) || 0,
-    feesSar: Number(fees) || 0,
-    ownerId: SELF_ID,
-    targetAccountId,
-    targetCustodianId: selectedAccount?.custodianId ?? SELF_ID,
-    targetLocation: selectedAccount?.name,
-  }
-
-  const preview = useMemo(() => { try { return previewManagedConversion(state, input) } catch { return null } }, [state, sourceId, sourcePortfolioId, sourceQty, targetQty, targetUnitValue, fees, targetAccountId, targetPortfolioId, targetSymbol, targetName, targetKind, targetUnit])
-  const selectedAvailable = sourcePortfolioId
-    ? state.portfolioSlices.filter(s => s.holdingId === sourceId && s.ownerId === SELF_ID && s.portfolioId === sourcePortfolioId).reduce((sum, s) => sum + s.quantity, 0)
-    : availableQuantity(state, sourceId, SELF_ID)
-
-  const submit = () => {
-    try {
-      convert(input)
-      toast.success(targetKind === 'cash' ? 'تم التسييل إلى نقد وتثبيت الربح/الخسارة المحققة.' : 'تم التحويل إلى أصل آخر واستمرت Cost Basis دون تسجيل ربح نقدي محقق.')
-    } catch (e) { toast.error(e instanceof Error ? e.message : 'تعذر تنفيذ التحويل') }
-  }
-
-  return <div className="page-stack">
-    <section className="section-intro"><div><span className="eyebrow">CONVERSION / REALIZATION POLICY</span><h2>تحويل أو تسييل أصل</h2><p>فرق القيمة يبقى غير محقق أثناء الاحتفاظ. عند الخروج إلى نقد نثبّت النتيجة المحققة. أما التحول من أصل إلى أصل فيحمل التكلفة الاقتصادية إلى الأصل الجديد بدل اختراع ربح نقدي.</p></div></section>
-    <section className="trade-grid">
-      <div className="panel trade-form"><div className="panel-head"><div><h2>تفاصيل العملية</h2><span>حدد الأصل الخارج وما استلمته فعليًا</span></div><ArrowLeftRight /></div>
-        <label>الأصل الخارج<select value={sourceId} onChange={e => { setSourceId(e.target.value); setSourcePortfolioId('') }}>{ownHoldings.map(h => <option key={h.id} value={h.id}>{state.parties.find(p => p.id === h.custodianId)?.name ?? ''} ← {state.accounts.find(a => a.id === h.accountId)?.name ?? ''} ← {h.name} — {h.symbol}</option>)}</select></label>
-        <label>الحصة/المحفظة المصدر<select value={sourcePortfolioId} onChange={e => setSourcePortfolioId(e.target.value)}><option value="">غير مخصص</option>{sourcePortfolioOptions.map(p => p && <option key={p.id} value={p.id}>{p.name}</option>)}</select><small>المتاح: {selectedAvailable.toLocaleString('ar-SA')} {source?.nativeUnit}</small></label>
-        <div className="field-grid"><label>الكمية الخارجة<input type="number" value={sourceQty} onChange={e => setSourceQty(e.target.value)} /></label><label>الرسوم بالريال<input type="number" value={fees} onChange={e => setFees(e.target.value)} /></label></div>
-        <div className="divider"><span>ما الذي استلمته؟</span></div>
-        <div className="field-grid three"><label>الرمز<input value={targetSymbol} onChange={e => setTargetSymbol(e.target.value.toUpperCase())} /></label><label>اسم الأصل<input value={targetName} onChange={e => setTargetName(e.target.value)} /></label><label>الوحدة<input value={targetUnit} onChange={e => setTargetUnit(e.target.value)} /></label></div>
-        <div className="field-grid"><label>الكمية المستلمة<input type="number" value={targetQty} onChange={e => setTargetQty(e.target.value)} /></label><label>قيمة الوحدة بالريال وقت التنفيذ<input type="number" value={targetUnitValue} onChange={e => setTargetUnitValue(e.target.value)} /></label></div>
-        <label>الحساب المستقبل<select value={targetAccountId} onChange={e => setTargetAccountId(e.target.value)}>{state.accounts.filter(a => a.status === 'active' && a.kind !== 'credit_card').map(a => <option key={a.id} value={a.id}>{state.parties.find(p => p.id === a.custodianId)?.name ?? ''} ← {a.name}</option>)}</select></label>
-        <label>المحفظة الهدف<select value={targetPortfolioId} onChange={e => setTargetPortfolioId(e.target.value)}><option value="">نفس المصدر / غير مخصص</option>{state.portfolios.filter(p => p.status === 'active').map(p => <option key={p.id} value={p.id}>{p.name}</option>)}</select></label>
-        <label>نوع الأصل المستلم<select value={targetKind} onChange={e => setTargetKind(e.target.value as AssetKind)}><option value="cash">نقد / رصيد عملة — يحقق P/L</option><option value="metal">معدن — تستمر التكلفة</option><option value="fund">صندوق — تستمر التكلفة</option><option value="stock">سهم — تستمر التكلفة</option><option value="crypto">عملة رقمية — تستمر التكلفة</option><option value="real_estate">عقار — تستمر التكلفة</option><option value="other">أخرى</option></select></label>
-        <button className="primary wide" onClick={submit} disabled={!preview}>تأكيد العملية</button>
-      </div>
-      <div className="panel preview-card"><div className="panel-head"><div><span className="eyebrow">PREVIEW</span><h2>{preview?.realizationState === 'realized_to_cash' ? 'معاينة النتيجة المحققة' : 'معاينة انتقال التكلفة'}</h2></div><Calculator /></div>{preview ? <><PreviewRow label="تكلفة الأصل الخارج" value={preview.sourceCostBasisSar == null ? 'غير معروفة' : `${money.format(preview.sourceCostBasisSar)} ر.س`} /><PreviewRow label="قيمة الأصل المستلم" value={`${money.format(preview.targetMarketValueSar)} ر.س`} /><PreviewRow label="الرسوم" value={`${money.format(preview.feesSar)} ر.س`} />{preview.realizationState === 'realized_to_cash' ? <div className="preview-total"><span>Realized P/L</span><strong className={preview.realizedGainLossSar == null ? '' : preview.realizedGainLossSar >= 0 ? 'profit' : 'loss'}>{preview.realizedGainLossSar == null ? 'غير قابل للحساب' : `${preview.realizedGainLossSar >= 0 ? '+' : ''}${money.format(preview.realizedGainLossSar)} ر.س`}</strong></div> : <div className="preview-total"><span>Cost Basis المحمولة للأصل الجديد</span><strong>{preview.propagatedTargetBasisSar == null ? 'غير معروفة' : `${money.format(preview.propagatedTargetBasisSar)} ر.س`}</strong></div>}<div className="rate-box"><span>معدل التحويل الفعلي</span><strong>{money.format(preview.exchangeRate)} {targetUnit} لكل {source?.nativeUnit}</strong></div></> : <div className="empty-preview"><TriangleAlert /><strong>تعذر إنشاء المعاينة</strong><span>تحقق من الكمية والحساب والحصة المختارة.</span></div>}</div>
-    </section>
-  </div>
-}
-
-function PreviewRow({ label, value }: { label: string; value: string }) { return <div className="preview-row"><span>{label}</span><strong>{value}</strong></div> }
+const money=new Intl.NumberFormat('ar-SA',{maximumFractionDigits:2})
+export function Trade(){const{state,convert}=useFinance();const toast=useToast();const ownAssets=state.holdings.filter(h=>(h.ownership.find(s=>s.ownerId===SELF_ID)?.quantity??0)>0&&!h.archived);const[sourceId,setSourceId]=useState(ownAssets[0]?.id??'');const[sourcePortfolioId,setSourcePortfolioId]=useState('');const[sourceQty,setSourceQty]=useState('100');const[targetSymbol,setTargetSymbol]=useState('SAR');const[targetName,setTargetName]=useState('ريال سعودي');const[targetKind,setTargetKind]=useState<AssetKind>('cash');const[targetUnit,setTargetUnit]=useState('SAR');const[targetQty,setTargetQty]=useState('100');const[targetUnitValue,setTargetUnitValue]=useState('1');const[fees,setFees]=useState('0');const[targetGroupId,setTargetGroupId]=useState('');const[targetPortfolioId,setTargetPortfolioId]=useState('');const source=state.holdings.find(h=>h.id===sourceId);const sourcePortfolioOptions=state.portfolioSlices.filter(s=>s.holdingId===sourceId&&s.ownerId===SELF_ID).map(s=>state.portfolios.find(p=>p.id===s.portfolioId)).filter(Boolean)
+ const input:ConversionInput={sourceHoldingId:sourceId,sourcePortfolioId:sourcePortfolioId||undefined,targetPortfolioId:targetPortfolioId||sourcePortfolioId||undefined,targetSymbol,targetName,targetKind,targetUnit,sourceQuantity:Number(sourceQty)||0,targetQuantity:Number(targetQty)||0,targetUnitValueSarAtExecution:Number(targetUnitValue)||0,feesSar:Number(fees)||0,ownerId:SELF_ID,targetGroupId:targetGroupId||undefined}
+ const preview=useMemo(()=>{try{return previewManagedConversion(state,input)}catch{return null}},[state,sourceId,sourcePortfolioId,sourceQty,targetQty,targetUnitValue,fees,targetGroupId,targetPortfolioId,targetSymbol,targetName,targetKind,targetUnit]);const selectedAvailable=sourcePortfolioId?state.portfolioSlices.filter(s=>s.holdingId===sourceId&&s.ownerId===SELF_ID&&s.portfolioId===sourcePortfolioId).reduce((sum,s)=>sum+s.quantity,0):availableQuantity(state,sourceId,SELF_ID)
+ const submit=()=>{try{convert(input);toast.success(targetKind==='cash'?'تم التسييل إلى أصل نقدي وتثبيت النتيجة المحققة.':'تم التحويل إلى أصل آخر واستمرت Cost Basis.')}catch(e){toast.error(e instanceof Error?e.message:'تعذر تنفيذ التحويل')}}
+ return <div className="page-stack"><section className="section-intro"><div><span className="eyebrow">ASSET → ASSET</span><h2>تحويل أو تسييل أصل</h2><p>كل طرف في العملية أصل. المجموعة فقط تحدد أين سيظهر الأصل الناتج في شجرتك.</p></div></section><section className="trade-grid"><div className="panel trade-form"><div className="panel-head"><div><h2>تفاصيل العملية</h2><span>حدد الأصل الخارج وما استلمته فعليًا</span></div><ArrowLeftRight/></div><label>الأصل الخارج<select value={sourceId} onChange={e=>{setSourceId(e.target.value);setSourcePortfolioId('')}}>{ownAssets.map(h=><option key={h.id} value={h.id}>{h.name} — {h.symbol}</option>)}</select></label><label>الحصة/المحفظة المصدر<select value={sourcePortfolioId} onChange={e=>setSourcePortfolioId(e.target.value)}><option value="">غير مخصص</option>{sourcePortfolioOptions.map(p=>p&&<option key={p.id} value={p.id}>{p.name}</option>)}</select><small>المتاح: {selectedAvailable.toLocaleString('ar-SA')} {source?.nativeUnit}</small></label><div className="field-grid"><label>الكمية الخارجة<input type="number" value={sourceQty} onChange={e=>setSourceQty(e.target.value)}/></label><label>الرسوم بالريال<input type="number" value={fees} onChange={e=>setFees(e.target.value)}/></label></div><div className="divider"><span>ما الذي استلمته؟</span></div><div className="field-grid three"><label>الرمز<input value={targetSymbol} onChange={e=>setTargetSymbol(e.target.value.toUpperCase())}/></label><label>اسم الأصل<input value={targetName} onChange={e=>setTargetName(e.target.value)}/></label><label>الوحدة<input value={targetUnit} onChange={e=>setTargetUnit(e.target.value)}/></label></div><div className="field-grid"><label>الكمية المستلمة<input type="number" value={targetQty} onChange={e=>setTargetQty(e.target.value)}/></label><label>قيمة الوحدة بالريال وقت التنفيذ<input type="number" value={targetUnitValue} onChange={e=>setTargetUnitValue(e.target.value)}/></label></div><GroupCascader groups={(state.accountGroups??[]).filter(g=>g.status==='active')} value={targetGroupId} onChange={setTargetGroupId} label="مجموعة الأصل الناتج"/><label>المحفظة الهدف<select value={targetPortfolioId} onChange={e=>setTargetPortfolioId(e.target.value)}><option value="">نفس المصدر / غير مخصص</option>{state.portfolios.filter(p=>p.status==='active').map(p=><option key={p.id} value={p.id}>{p.name}</option>)}</select></label><label>نوع الأصل المستلم<select value={targetKind} onChange={e=>setTargetKind(e.target.value as AssetKind)}><option value="cash">نقد / عملة — يحقق P/L</option><option value="metal">معدن</option><option value="fund">صندوق</option><option value="stock">سهم</option><option value="crypto">عملة رقمية</option><option value="real_estate">عقار</option><option value="other">أخرى</option></select></label><button className="primary wide" onClick={submit} disabled={!preview}>تأكيد العملية</button></div><div className="panel preview-card"><div className="panel-head"><div><span className="eyebrow">PREVIEW</span><h2>{preview?.realizationState==='realized_to_cash'?'معاينة النتيجة المحققة':'معاينة انتقال التكلفة'}</h2></div><Calculator/></div>{preview?<><PreviewRow label="تكلفة الأصل الخارج" value={preview.sourceCostBasisSar==null?'غير معروفة':`${money.format(preview.sourceCostBasisSar)} ر.س`}/><PreviewRow label="قيمة الأصل المستلم" value={`${money.format(preview.targetMarketValueSar)} ر.س`}/><PreviewRow label="الرسوم" value={`${money.format(preview.feesSar)} ر.س`}/>{preview.realizationState==='realized_to_cash'?<div className="preview-total"><span>Realized P/L</span><strong className={preview.realizedGainLossSar==null?'':preview.realizedGainLossSar>=0?'profit':'loss'}>{preview.realizedGainLossSar==null?'غير قابل للحساب':`${preview.realizedGainLossSar>=0?'+':''}${money.format(preview.realizedGainLossSar)} ر.س`}</strong></div>:<div className="preview-total"><span>Cost Basis المحمولة</span><strong>{preview.propagatedTargetBasisSar==null?'غير معروفة':`${money.format(preview.propagatedTargetBasisSar)} ر.س`}</strong></div>}<div className="rate-box"><span>معدل التحويل الفعلي</span><strong>{money.format(preview.exchangeRate)} {targetUnit} لكل {source?.nativeUnit}</strong></div></>:<div className="empty-preview"><TriangleAlert/><strong>تعذر إنشاء المعاينة</strong><span>تحقق من الكميات والقيم.</span></div>}</div></section></div>}
+function PreviewRow({label,value}:{label:string;value:string}){return <div className="preview-row"><span>{label}</span><strong>{value}</strong></div>}
