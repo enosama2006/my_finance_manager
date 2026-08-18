@@ -19,7 +19,6 @@
     "lucide-react": "latest",
     "react": "latest",
     "react-dom": "latest",
-    "sql.js": "1.14.1",
     "vite": "latest"
   },
   "devDependencies": {
