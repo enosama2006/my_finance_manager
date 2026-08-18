@@ -124,10 +124,10 @@ export function resizeCostBasisLot(lot: CostBasisLot, nextQuantity: number): Cos
 
 function reduceOwnerCostLotsWeightedAverage(lots: CostBasisLot[], ownerId: string, quantity: number): CostBasisLot[] {
   const ownerLots = lots.filter((lot) => lot.ownerId === ownerId)
-  const total = ownerLots.reduce((sum, lot) => sum + lot.quantity, 0)
+  const total = round2(ownerLots.reduce((sum, lot) => sum + lot.quantity, 0))
   if (quantity > total + 1e-9) throw new Error('Cost-basis lots do not cover owner quantity')
-  const targetRemaining = Math.max(0, total - quantity)
-  if (targetRemaining <= 1e-9) return lots.filter((lot) => lot.ownerId !== ownerId)
+  const targetRemaining = round2(total - quantity)
+  if (targetRemaining <= 0) return lots.filter((lot) => lot.ownerId !== ownerId)
 
   const ownerCount = ownerLots.length
   let ownerSeen = 0
@@ -136,11 +136,11 @@ function reduceOwnerCostLotsWeightedAverage(lots: CostBasisLot[], ownerId: strin
     if (lot.ownerId !== ownerId) return lot
     ownerSeen += 1
     const nextQuantity = ownerSeen === ownerCount
-      ? Math.max(0, targetRemaining - assigned)
-      : (lot.quantity / total) * targetRemaining
-    assigned += nextQuantity
+      ? round2(targetRemaining - assigned)
+      : round2((lot.quantity / total) * targetRemaining)
+    assigned = round2(assigned + nextQuantity)
     return resizeCostBasisLot(lot, nextQuantity)
-  }).filter((lot) => lot.quantity > 1e-9)
+  }).filter((lot) => lot.quantity > 0)
 }
 
 export interface ConversionPreview {
@@ -169,7 +169,7 @@ export function previewConversion(state: FinanceState, input: ConversionInput): 
   const proceedsSar = round2(input.targetQuantity * input.targetUnitValueSarAtExecution)
   const feesSar = round2(Math.max(0, input.feesSar))
   const realizedGainLossSar = sourceCostBasisSar == null ? null : round2(proceedsSar - feesSar - sourceCostBasisSar)
-  const exchangeRate = input.targetQuantity / input.sourceQuantity
+  const exchangeRate = round2(input.targetQuantity / input.sourceQuantity)
   return { sourceCostBasisSar, proceedsSar, feesSar, realizedGainLossSar, exchangeRate }
 }
 
@@ -180,8 +180,8 @@ export function applyConversion(state: FinanceState, input: ConversionInput, now
 
   const updatedSource: Holding = {
     ...source,
-    quantity: source.quantity - input.sourceQuantity,
-    ownership: source.ownership.map((share) => share.ownerId === input.ownerId ? { ...share, quantity: share.quantity - input.sourceQuantity } : share),
+    quantity: round2(source.quantity - input.sourceQuantity),
+    ownership: source.ownership.map((share) => share.ownerId === input.ownerId ? { ...share, quantity: round2(share.quantity - input.sourceQuantity) } : share),
     costLots: reduceOwnerCostLotsWeightedAverage(source.costLots, input.ownerId, input.sourceQuantity),
   }
 
@@ -212,9 +212,9 @@ export function applyConversion(state: FinanceState, input: ConversionInput, now
     portfolioSlices = portfolioSlices.map((slice) => {
       if (remaining <= 0 || slice.holdingId !== source.id || slice.ownerId !== input.ownerId || slice.portfolioId !== input.sourcePortfolioId) return slice
       const used = Math.min(slice.quantity, remaining)
-      remaining -= used
-      return { ...slice, quantity: slice.quantity - used }
-    }).filter((slice) => slice.quantity > 1e-9)
+      remaining = round2(remaining - used)
+      return { ...slice, quantity: round2(slice.quantity - used) }
+    }).filter((slice) => slice.quantity > 0)
   }
 
   const destinationPortfolio = input.targetPortfolioId ?? input.sourcePortfolioId
@@ -252,13 +252,13 @@ export function updateValuation(state: FinanceState, holdingId: string, unitPric
 }
 
 export function assertPhysicalQuantityInvariant(holding: Holding): boolean {
-  return Math.abs(holding.ownership.reduce((sum, share) => sum + share.quantity, 0) - holding.quantity) <= 1e-9
+  return round2(holding.ownership.reduce((sum, share) => sum + share.quantity, 0)) === round2(holding.quantity)
 }
 
 export function assertCostBasisCoverageInvariant(holding: Holding): boolean {
-  return holding.ownership.every((share) => Math.abs(holding.costLots.filter((lot) => lot.ownerId === share.ownerId).reduce((sum, lot) => sum + lot.quantity, 0) - share.quantity) <= 1e-9)
+  return holding.ownership.every((share) => round2(holding.costLots.filter((lot) => lot.ownerId === share.ownerId).reduce((sum, lot) => sum + lot.quantity, 0)) === round2(share.quantity))
 }
 
 export function assertPortfolioAllocationInvariant(state: FinanceState): boolean {
-  return state.holdings.every((holding) => holding.ownership.every((share) => allocatedQuantity(state, holding.id, share.ownerId) <= share.quantity + 1e-9))
+  return state.holdings.every((holding) => holding.ownership.every((share) => allocatedQuantity(state, holding.id, share.ownerId) <= round2(share.quantity)))
 }
