@@ -7,12 +7,12 @@ This file is the first document any AI coding agent must read before modifying M
 ## Mandatory reading order
 
 1. `docs/spec/README.md`
-2. `docs/spec/product/product-definition.md`
-3. `docs/spec/decisions/decision-log.md`
-4. `docs/spec/domain/domain-model.md`
-5. `docs/domain-rules.md`
-6. `docs/spec/ux/responsive-shell.md`
-7. `docs/spec/ux/screen-catalog.md`
+2. `docs/spec/product/product-concept.md` — canonical product concept (dimensions, rules, scenarios, superseded ideas).
+3. `docs/spec/quality/invariant-gate.md` — executable invariants; changing an invariant requires an approved ADR.
+4. `docs/spec/decisions/decision-log.md` and `docs/spec/decisions/ADR-xxx.md`.
+5. `docs/spec/domain/domain-model.md`.
+6. `docs/spec/calculations/calculation-rules.md`.
+7. `docs/spec/ux/responsive-shell.md` and `docs/spec/ux/screen-catalog.md`.
 8. The exact screen/use-case/calculation/data specs referenced by the task.
 9. Existing code only after the specification is understood.
 
