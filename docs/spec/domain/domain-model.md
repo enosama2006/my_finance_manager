@@ -4,163 +4,263 @@ Status: **Approved core concepts / evolving target model**
 
 This document defines financial meaning independent of React, database engine or API framework.
 
+Authoritative structural baseline: ADR-004.
+Draft refinement under real-use validation: ADR-005.
+
 ## 1. Core entities
 
 ### ENT-001 Party
-A person or organization participating in ownership, custody or financial relationships.
+A person or organization participating in ownership, custody, beneficiary or financial relationships.
 
-Examples of roles a Party may play:
+Examples:
 - self/user;
 - family owner;
 - beneficiary;
-- bank;
-- broker;
+- bank/broker/institution;
 - custodian;
-- debtor/creditor counterparty;
-- institution.
+- debtor/creditor/counterparty.
 
 A Party role does not automatically imply ownership.
 
-### ENT-010 Account
-Stable identity for a real account, wallet, vault, broker account, custody container or other place where Holdings exist.
+### ENT-010 Account — Deprecated target concept / legacy compatibility
+Historical schema-v4 stable identity for a real account/wallet/vault/broker account.
 
-Answers: **where/how is value held?**
+Target rule after ADR-004:
+- Account is **not mandatory** in the user-facing wealth hierarchy;
+- existing Account rows may remain for import/provenance/legacy tests;
+- no new target flow should require Account before Asset;
+- legacy `Account -> Holding` data normalizes into direct Group -> Asset without changing financial truth.
 
-Key properties:
-- stable ID;
-- type;
-- custodian/institution;
-- status active/closed/archived;
-- optional native currency/reference/last4;
-- optional opening/observed reconciliation data.
+Do not revive ENT-010 as a second wealth-bearing layer.
 
-Renaming or archiving does not change historical identity.
+### ENT-020 InstrumentDefinition — Draft normalized reference identity
+Historically this document called ENT-020 `Asset master`. ADR-005 clarifies its target meaning as a non-quantity-bearing reference definition of an economic/market instrument.
 
-### ENT-020 Asset
-Target normalized master definition of an economic asset type.
+Examples:
+- SAR;
+- USD;
+- Gold/XAU gram;
+- Silver/XAG gram;
+- a named mutual fund;
+- a listed stock/ETF/REIT;
+- a crypto instrument.
 
-Examples: SAR, USD, XAU gold gram, XAG silver gram, a mutual fund, stock, crypto asset, property unit.
+Answers: **what instrument/economic thing is this?**
 
-Answers: **what kind of economic thing is this?**
+May carry:
+- official Arabic/English names;
+- symbol/ISIN/local code;
+- asset type;
+- currency/native unit;
+- provider/manager;
+- valuation/quote strategy;
+- distribution policy.
 
-Note: the current prototype embeds asset identity fields directly inside Holding. The future clean rebuild may normalize Asset as a separate table/entity.
+MUST NOT carry:
+- user balance/quantity;
+- ownership;
+- cost basis;
+- Portfolio allocation;
+- Ledger history.
 
-### ENT-030 Holding
-A quantity-bearing position of one Asset in one Account/custody context.
+A manual Asset may temporarily have no InstrumentDefinition and can later be reconciled without rewriting financial history.
 
-Answers: **what quantity physically/economically exists here?**
+### ENT-025 Group — Approved hierarchy/container
+The only user-facing hierarchy/container in the wealth tree.
+
+Examples:
+
+```text
+البنوك
+الاستثمارات -> الراجحي المالية
+المعادن
+ودائع -> أخي سامي
+```
+
+Group may:
+- have parent/children;
+- contain direct Assets;
+- be renamed/reparented;
+- carry descriptive non-financial metadata in future;
+- expose derived roll-ups of descendant Assets.
+
+Group MUST NOT have:
+- balance/quantity;
+- ownership;
+- Cost Basis;
+- independent valuation;
+- Portfolio allocation;
+- Ledger events.
+
+A Group may visually mirror a real institution/account context, but Group placement alone is not authoritative custody or ownership truth. Reorganization is metadata-only unless a separate real transaction/custody event is posted.
+
+### ENT-030 Asset — Approved quantity-bearing user financial truth
+Historically called `Holding` in schema/prototype code. Target user-facing name is Asset.
+
+Answers: **what concrete quantity/value does the user currently hold?**
 
 Key dimensions:
-- asset;
-- account/custodian;
-- native unit and quantity;
-- ownership shares;
-- cost-basis lots by owner;
+- optional InstrumentDefinition reference;
+- name/type/symbol/native unit;
+- native quantity;
+- OwnershipShares;
+- exact CostBasisLots;
 - current valuation metadata;
-- optional location.
+- optional Group placement;
+- optional provider/custodian/location metadata;
+- optional performance role / Position relationship;
+- transaction references.
+
+An Asset MUST NOT contain another Asset.
+
+The same InstrumentDefinition may have several Assets when the user intentionally tracks separate holdings.
+
+Example:
+
+```text
+InstrumentDefinition: Gold / XAU
+Asset A: 140g held at Al Rajhi
+Asset B: 60g held by Brother
+Derived Gold total = 200g
+```
+
+The derived total is not stored as a third Asset.
 
 ### ENT-031 OwnershipShare
-How much of a Holding belongs economically to one owner.
+How much of an Asset belongs economically to one Owner.
 
-Invariant: total ownership-share native quantity must equal the Holding native quantity unless the model explicitly supports temporarily unassigned ownership; current rule does not.
+Invariant: total OwnershipShare native quantity equals Asset native quantity unless an explicitly approved temporary-unassigned state exists; current rule does not.
+
+Ownership and custody/provider are independent.
 
 ### ENT-032 CostBasisLot
-Quantity and acquisition cost attributable to one owner inside a Holding.
+One acquisition contribution to one owner's Asset quantity.
 
-Current approved policy for realized-cost calculations: **weighted average per owner**.
+Target facts:
+- quantity;
+- ownerId;
+- exact total attributable Cost Basis;
+- acquiredAt;
+- source transaction/reference;
+- optional acquisition-chain metadata.
 
-Different owners in the same Holding can have different cost bases.
+Approved product-performance disposal method remains weighted average per owner unless later tax policy requires another method.
 
-Unknown cost is represented as unknown; the system must not invent a value.
+**Precision rule:** display-rounded unit cost is never the source of truth. Unit cost is derived from exact lot basis / quantity. Unknown basis remains unknown.
 
 ### ENT-040 Portfolio
-Hierarchical purpose/earmark container.
+Hierarchical purpose/earmark object.
 
-Answers: **why is value reserved?**
+Answers: **why is value reserved/managed this way?**
 
-A Portfolio may:
+Portfolio is not a bank account, broker account, Group or Asset.
+
+It may:
 - have parent/children;
-- have one or multiple owners as allowed by future policy;
-- have a beneficiary;
-- have target value;
-- span multiple Accounts and Asset types.
+- have one/multiple owners according to policy;
+- have beneficiary/purpose/profile/target;
+- span multiple Groups, providers and Asset types;
+- remain long-lived while Positions/Cycles open and close.
 
-Portfolio is the unified concept replacing a separate parallel “allocation” entity.
+Portfolio is optional. Financial truth remains valid without assigning an Asset to a Portfolio.
 
-### ENT-041 PortfolioSlice
-A native quantity from one Owner's share of one Holding assigned to one leaf Portfolio.
+### ENT-041 PortfolioAllocation / PortfolioSlice
+A native quantity from one Owner's share of one Asset assigned to one Portfolio.
 
-This is the bridge between physical/economic reality and purpose.
+Current prototype name may remain `PortfolioSlice`.
 
-Invariant: allocated slices for Owner+Holding cannot exceed that Owner's native quantity.
+Invariant: allocations for Owner+Asset cannot exceed that Owner's native quantity.
+
+Ordinary Portfolio purpose is independent from Group/provider location. Designated or hard backing may optionally reference specific Asset quantities under SCN-005/ADR-002 policy.
 
 ### ENT-050 LogicalTransaction
 Human-level record of one real financial event or controlled adjustment.
 
 Examples:
+- opening state;
 - income;
 - expense;
 - real transfer;
 - purchase;
 - sale/conversion;
-- portfolio settlement/reallocation metadata event;
-- ownership/debt event;
+- investment distribution;
+- ownership/debt settlement;
 - liability creation/payment;
 - reconciliation adjustment;
-- refund.
-
-Target design may represent economic effects through transaction legs rather than only source/target fields.
+- refund;
+- mandate settlement.
 
 ### ENT-051 TransactionRevision
-Audit record for correcting data entry in the same LogicalTransaction.
+Audit record for correcting user-entered data in the same LogicalTransaction.
 
-Correction preserves the logical identity; it is not represented as a fake new refund/reversal unless a new event actually happened in reality.
+Approved rule:
 
-### ENT-052 TransactionLeg
-Target normalized representation of one debit/credit/quantity/value effect of a LogicalTransaction against an Account/Holding/Portfolio/Liability/Claim.
+```text
+Reverse old projection -> Apply corrected intent -> preserve same logical ID + revision audit
+```
 
-Status: `Draft target schema concept`.
+A real later refund/reversal is a separate linked Transaction.
 
-Reason: complex events such as card purchases, asset conversion and multi-party settlement are clearer and more extensible as multiple legs than hard-coded source/target columns.
+### ENT-052 TransactionLeg — Draft target schema
+Normalized effect of a LogicalTransaction against Assets, Portfolio allocations, Liabilities, Claims or settlement structures.
+
+Needed for complex events such as:
+- card purchase/payment;
+- conversion with fees;
+- cross-owner settlement;
+- acquisition chains;
+- investment distributions;
+- entrusted-value mandates.
+
+Generic legs must not weaken deterministic business validation.
 
 ### ENT-060 IncomeStream
 Expected/recurring planning record.
 
-Statuses include expected, received, late, missed.
+Expectation has no effect on actual Asset quantity until a real posted receipt exists.
 
-Expectation has **no effect on actual account/Holding quantity** until a real posted income transaction exists.
+Investment distributions received from a Fund Asset are actual transactions and may also inform expected-income planning, but the expectation is not the receipt.
 
 ### ENT-070 Liability
 External obligation attributed to an owner.
 
 Examples: credit-card balance, loan, payable.
 
-Liability reduces net worth and is not silently represented as a negative Holding.
+Liability reduces net worth and is not silently represented as a negative Asset.
 
 ### ENT-080 Claim
 Right against another Party.
 
-Example: user lends 500g silver equivalent to Ahmed; user owns a claim denominated in 500g silver rather than necessarily continuing to own the exact physical silver.
-
-This differs from a Holding that the user still owns while Ahmed merely stores it.
+Example: another person may use the user's silver/cash and only owes equivalent value later. That is a Claim, not simultaneously the same physical Asset in third-party custody.
 
 ### ENT-090 ValuationSnapshot
-Target historical valuation observation for a Holding/Asset.
+Historical/current valuation observation for an Asset/Instrument.
 
 Captures method, source, timestamp and unit price/value. Valuation changes current wealth/unrealized performance but does not by itself create income, expense or realized P/L.
 
 ### ENT-100 ReconciliationSnapshot
-Observed real-world balance/quantity compared with system-calculated state at a point in time.
+Observed real-world quantity/balance compared with calculated Asset state at a point in time.
 
-### ENT-110 ClearingEntry
-Target explicit representation of temporary funding mismatch when an expense happens but its intended Portfolio coverage is insufficient or settlement between purpose and payment source is incomplete.
-
-Status: `Draft; detailed settlement model still to be specified`.
+### ENT-110 ClearingEntry — Draft
+Temporary funding mismatch/settlement state when payment source, economic bearer and Portfolio purpose do not align immediately.
 
 ### ENT-120 Category
 Income/expense classification tree.
 
-Category is independent from Portfolio and Asset Class.
+Category is independent from Portfolio, Asset Type, Owner and Beneficiary.
+
+### ENT-130 Position — Approved concept / evolving implementation
+Optional performance/lifecycle scope for an exposure.
+
+A Position is **not one purchase** and must not force one new Asset per purchase.
+
+Repeated acquisitions into one Asset may join one open Position or different explicit CapitalCycles according to user intent/policy.
+
+### ENT-140 CapitalCycle — Draft/partially implemented
+Finite economic episode used to measure capital in/out, realized result and closure independently from Portfolio lifetime.
+
+### ENT-150 SettlementMandate / Encumbrance — Draft
+Represents entrusted value that is controlled/converted for another Party's settlement objective and therefore must not appear as unrestricted Free Liquidity.
 
 ---
 
@@ -168,105 +268,147 @@ Category is independent from Portfolio and Asset Class.
 
 ```mermaid
 erDiagram
-  PARTY ||--o{ ACCOUNT : custodians_or_institutions
-  ASSET ||--o{ HOLDING : represented_by
-  ACCOUNT ||--o{ HOLDING : contains
-  HOLDING ||--|{ OWNERSHIP_SHARE : owned_as
   PARTY ||--o{ OWNERSHIP_SHARE : owns
-  HOLDING ||--o{ COST_BASIS_LOT : costed_by
+  INSTRUMENT_DEFINITION ||--o{ ASSET : identifies
+  GROUP ||--o{ GROUP : parent_of
+  GROUP ||--o{ ASSET : organizes
+  ASSET ||--|{ OWNERSHIP_SHARE : owned_as
+  ASSET ||--o{ COST_BASIS_LOT : costed_by
   PARTY ||--o{ COST_BASIS_LOT : owns_cost
   PORTFOLIO ||--o{ PORTFOLIO : parent_of
-  PORTFOLIO ||--o{ PORTFOLIO_SLICE : contains
-  HOLDING ||--o{ PORTFOLIO_SLICE : allocated_from
-  PARTY ||--o{ PORTFOLIO_SLICE : owner_scope
+  PORTFOLIO ||--o{ PORTFOLIO_ALLOCATION : allocates
+  ASSET ||--o{ PORTFOLIO_ALLOCATION : allocated_from
+  PARTY ||--o{ PORTFOLIO_ALLOCATION : owner_scope
   LOGICAL_TRANSACTION ||--o{ TRANSACTION_REVISION : audited_by
   LOGICAL_TRANSACTION ||--o{ TRANSACTION_LEG : composed_of
+  ASSET ||--o{ VALUATION_SNAPSHOT : valued_by
   PARTY ||--o{ LIABILITY : owes
   PARTY ||--o{ CLAIM : creditor
   PARTY ||--o{ CLAIM : debtor
-  HOLDING ||--o{ VALUATION_SNAPSHOT : valued_by
-  ACCOUNT ||--o{ RECONCILIATION_SNAPSHOT : reconciled_by
+  POSITION }o--o{ ASSET : scopes
+  CAPITAL_CYCLE }o--o{ POSITION : contains
 ```
+
+Legacy Account relations are intentionally omitted from the target relationship map.
+
+---
 
 ## 3. Independent questions — never collapse them
 
 | Question | Domain concept |
 |---|---|
+| What instrument is this? | InstrumentDefinition |
+| What concrete quantity/value do I hold? | Asset |
+| Where did I organize it in MyFinMan? | Group |
 | Whose wealth is it? | OwnershipShare / Party |
-| Who currently holds it? | Account/Custodian |
-| Where is it physically? | Location |
-| What is it? | Asset/Holding |
-| Why is it reserved? | Portfolio/PortfolioSlice |
-| What did the owner pay? | CostBasisLot |
+| Who/provider physically controls it? | Asset custody/provider metadata / Party |
+| Where is it physically? | Asset location metadata |
+| Why is it reserved/managed? | Portfolio / PortfolioAllocation |
+| What did this acquisition cost? | CostBasisLot |
 | What is it worth now? | ValuationSnapshot/current valuation |
 | What does another party owe? | Claim |
 | What does the owner owe? | Liability |
 | What happened? | LogicalTransaction |
-| Was an input corrected? | TransactionRevision |
+| Was user input corrected? | TransactionRevision |
+| Which performance exposure/cycle is this part of? | Position / CapitalCycle |
+
+---
 
 ## 4. Approved invariants
 
 ### RULE-001 — One reality, multiple lenses
-A Holding or value is not duplicated merely because it is shown by owner, account, portfolio, custodian or asset class.
+The same Asset quantity is not duplicated merely because it is shown by owner, Group, Portfolio, instrument, provider or asset class.
 
-### RULE-002 — Ownership ≠ custody
-Changing custody/account/location does not transfer economic ownership unless an explicit ownership event says so.
+### RULE-002 — Ownership != custody/provider
+Changing custodian/provider/location does not transfer economic ownership unless an explicit ownership event says so.
 
-### RULE-003 — Physical quantity invariant
-Sum of OwnershipShares for a Holding equals the Holding native quantity.
+### RULE-003 — Physical/economic quantity invariant
+Sum of OwnershipShares for an Asset equals Asset native quantity.
 
 ### RULE-004 — Portfolio allocation invariant
-Sum of PortfolioSlices for one Owner+Holding cannot exceed that owner's native Holding quantity.
+Sum of Portfolio allocations for one Owner+Asset cannot exceed that Owner's native Asset quantity.
 
 ### RULE-005 — Available meaning
-Available is native quantity/value not assigned to PortfolioSlices, not bank balance and not Net Worth minus portfolio targets.
+Available is owned Asset quantity/value not assigned/protected by Portfolio or other explicit encumbrance according to policy.
 
 ### RULE-006 — Other-owner isolation
-Another owner's share cannot silently satisfy the user's portfolio, expense or conversion.
+Another owner's share cannot silently satisfy the user's Portfolio, expense or conversion.
 
 ### RULE-007 — Expected is not actual
-IncomeStream expectation never increases actual Holdings until posted Income occurs.
+Expected IncomeStream never increases Asset quantity until posted receipt occurs.
 
 ### RULE-008 — Valuation is not cash flow
 Price/valuation updates do not create income, expense, transfer or realized P/L.
 
 ### RULE-009 — Real transfer meaning
-Real Transfer changes where the same real value sits. It does not by itself create income/expense or realized trading P/L.
+Real Transfer moves quantity between real Asset balances/contexts. It does not by itself create income/expense or realized P/L for principal.
 
 ### RULE-010 — Reallocation meaning
-Portfolio reallocation changes purpose only. It does not change real Account/Holding quantity or realized P/L.
+Portfolio reallocation changes WHY only. Group reorganization changes UI organization only. Neither creates a fake real transfer.
 
 ### RULE-011 — Realized P/L boundary
-Realized Gain/Loss is created only by a qualifying true asset conversion/disposal/sale under the approved cost-basis method.
+Realized result is created only by a qualifying true disposal/conversion/sale/settlement under approved cost policy.
 
-### RULE-012 — Cost basis per owner
-Cost basis is owner-specific. Shared physical custody does not merge owners' economic acquisition costs.
+### RULE-012 — Cost basis per owner and lot
+Cost basis is owner-specific and lot-supported. Shared instrument identity or custody does not blend different owners' acquisition costs.
 
 ### RULE-013 — Unknown cost remains unknown
-Unknown cost can coexist with known current valuation. Performance requiring cost must report unknown/excluded rather than fabricated zero cost.
+Unknown cost may coexist with known current valuation. Performance requiring basis reports unknown/excluded rather than fabricated zero or nominal basis.
 
-### RULE-014 — Claim ≠ third-party custody
-If a third party stores a specific asset still owned by the user, it remains the user's Holding with external Custody. If the third party only owes an equivalent amount/quantity, model a Claim, not both.
+### RULE-014 — Claim != third-party custody
+Specific user-owned value stored by another Party remains an Asset with external custody metadata. If the Party only owes equivalent value, model a Claim, not both.
 
 ### RULE-015 — Liability separation
-Credit-card or loan liability is a separate obligation. A card payment reduces cash and liability; it does not create the original expense again.
+Credit-card/loan liability is separate from Expense and Cash Asset payment.
 
 ### RULE-016 — Logical correction
-Input correction modifies the same logical financial event through a revision/audit mechanism and atomic reprojection of dependent state. A real later refund/reversal is a separate event.
+User correction retains logical transaction identity and atomically reprojects affected Assets/lots/allocations/positions/liabilities where supported.
 
-### RULE-017 — Parent portfolio no double count
-Portfolio parent values roll up child slices. The same native quantity must not be stored redundantly in parent and child solely for totals.
+### RULE-017 — Parent Portfolio no double count
+Parent values roll up descendant allocations; do not redundantly store the same quantity at parent and child solely for totals.
 
 ### RULE-018 — Stable identities
-Renaming accounts, portfolios or parties does not replace stable IDs or historical references.
+Renaming Groups, Assets, Portfolios or Parties does not replace stable IDs or historical references.
+
+### RULE-019 — Group has no financial truth
+Group never owns balance, Cost Basis, P/L or Ledger. Its roll-up is derived.
+
+### RULE-020 — Asset never contains Asset
+All user hierarchy is Group -> Group/Asset.
+
+### RULE-021 — InstrumentDefinition is reference-only
+InstrumentDefinition may aggregate/identify Assets but never stores user's wealth.
+
+### RULE-022 — Repeated purchase adds lot, not mandatory new Asset
+When user chooses an existing compatible Asset, purchase increases quantity and appends an independently reversible CostBasisLot.
+
+### RULE-023 — Exact lot basis
+Store exact total lot basis or sufficient precision to reconstruct it exactly within approved monetary tolerance. Round display values only.
+
+### RULE-024 — Reporting currency != historical basis
+Reporting/FX valuation translates current value. It never invents or rewrites historical acquisition basis.
+
+### RULE-025 — Portfolio != account/broker context
+Portfolio is WHY. A broker/bank context may be represented by Group organization plus the Assets held there.
+
+### RULE-026 — Investment distribution linkage
+A cash distribution received from an investment Asset increases the destination Cash Asset and remains linked to the source investment for performance. Ordinary cash distribution does not reduce units unless the actual product event says otherwise.
+
+---
 
 ## 5. Areas still Draft/TBD
 
 - Exact normalized TransactionLeg accounting schema.
-- Clearing/settlement algorithm for cross-asset purpose funding.
-- Shared-portfolio ownership governance.
-- Tax-specific lot selection beyond the current weighted-average product-performance rule.
-- Multi-currency base/reporting currency policy beyond SAR-centered prototype examples.
+- InstrumentDefinition/provider catalog implementation and identifiers.
+- Exact custody/provider metadata normalization if Group names are insufficient for reporting.
+- Full cross-owner clearing/settlement algorithm.
+- SettlementMandate/encumbrance implementation.
+- AcquisitionChain/CostFlow normalized persistence.
+- Position/CapitalCycle rules for repeated buys, partial sales and tax-lot reporting.
+- Return-of-capital distribution basis policy.
+- Shared-Portfolio ownership governance.
+- Tax-specific lot selection beyond weighted-average product-performance reporting.
+- Multi-currency historical basis onboarding and FX quote history.
 - Property co-ownership granularity and valuation workflow.
 - Offline/native synchronization model.
 
