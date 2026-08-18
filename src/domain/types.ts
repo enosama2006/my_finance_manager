@@ -180,6 +180,8 @@ export interface AssetPurchaseUserInput {
   sourceAccountId?: string
   ownerId: string
   amountPaid: number
+  /** Explicit existing Asset selected for DCA/repeated purchase. Absent means create a new Asset. */
+  targetAssetId?: string
   targetGroupId?: string
   targetAccountId?: string
   assetTypeId: string
@@ -188,6 +190,8 @@ export interface AssetPurchaseUserInput {
   quantity: number
   extraCostsSar?: number
   portfolioId?: string
+  /** Exact native source quantity restored to the source Portfolio when this purchase is reversed. */
+  sourcePortfolioQuantityConsumed?: number
   location?: string
   marketUnitPriceSar?: number
   marketSource?: string
