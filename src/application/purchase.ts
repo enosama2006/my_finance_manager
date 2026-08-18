@@ -127,7 +127,6 @@ function existingTargetForPurchase(state: FinanceState, input: SimplifiedPurchas
   return target
 }
 function appendPurchaseLot(target: Holding, input: SimplifiedPurchaseInput, preview: PurchasePreview, transactionId: string, at: string): Holding {
-  const owned = ownerQuantity(target, input.ownerId)
   const ownership = target.ownership.some(s => s.ownerId === input.ownerId)
     ? target.ownership.map(s => s.ownerId === input.ownerId ? { ...s, quantity: s.quantity + input.quantity } : s)
     : [...target.ownership, { ownerId: input.ownerId, quantity: input.quantity }]
@@ -141,10 +140,9 @@ function appendPurchaseLot(target: Holding, input: SimplifiedPurchaseInput, prev
     valuationSource: input.marketQuote?.source ?? target.valuationSource,
     valuedAt: input.marketQuote?.asOf ?? target.valuedAt,
     acquisitionJourney: [...(target.acquisitionJourney ?? []), `شراء إضافي ${input.quantity} ${target.nativeUnit}`],
-    ownership: owned >= 0 ? ownership : ownership,
   }
 }
-function updateOrCreatePosition(state: FinanceState, target: Holding, input: SimplifiedPurchaseInput, preview: PurchasePreview, at: string): { positions: Position[]; positionId: string; targetPositionId: string } {
+function updateOrCreatePosition(state: FinanceState, target: Holding, input: SimplifiedPurchaseInput, preview: PurchasePreview, at: string): { positions: Position[]; positionId: string } {
   const positions = [...(state.positions ?? [])]
   if (target.positionId) {
     const index = positions.findIndex(p => p.id === target.positionId)
@@ -152,12 +150,12 @@ function updateOrCreatePosition(state: FinanceState, target: Holding, input: Sim
     if (position) {
       if (position.ownerId !== input.ownerId || position.status !== 'open' || position.realizedGainLossSar !== 0) throw new Error('المركز المرتبط بالأصل لا يقبل شراءً إضافيًا آليًا؛ افتح حيازة مستقلة')
       positions[index] = { ...position, initialCostBasisSar: round2(position.initialCostBasisSar + preview.totalCostBasisSar), portfolioId: position.portfolioId ?? input.portfolioId }
-      return { positions, positionId: position.id, targetPositionId: position.id }
+      return { positions, positionId: position.id }
     }
   }
   const positionId = id('pos')
   positions.push({ id: positionId, name: target.name, ownerId: input.ownerId, portfolioId: input.portfolioId, holdingIds: [target.id], openedAt: at, status: 'open', performanceRole: target.performanceRole ?? 'investment', initialCostBasisSar: preview.totalCostBasisSar, realizedGainLossSar: 0, note: 'مركز واحد يمكن أن يحتوي عدة عمليات شراء/Lots لنفس الحيازة.' })
-  return { positions, positionId, targetPositionId: positionId }
+  return { positions, positionId }
 }
 
 export function purchaseAssetSimplified(state: FinanceState, input: SimplifiedPurchaseInput): FinanceState {
@@ -188,7 +186,7 @@ export function purchaseAssetSimplified(state: FinanceState, input: SimplifiedPu
     target = appendPurchaseLot(existingTarget, input, preview, transactionId, at)
     const pos = updateOrCreatePosition(next, target, input, preview, at)
     positionId = pos.positionId
-    target = { ...target, positionId: pos.targetPositionId }
+    target = { ...target, positionId }
     next = { ...next, holdings: next.holdings.map(h => h.id === target.id ? target : h), positions: pos.positions }
   } else {
     createdTarget = true
