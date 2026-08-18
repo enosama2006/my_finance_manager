@@ -85,7 +85,7 @@ function PurchaseForm({ state, groups, portfolios, onSubmit }: { state: FinanceS
 
   const selectedTarget = state.holdings.find(h => h.id === targetAssetId && !h.archived)
   const effectiveName = selectedTarget?.name ?? (name.trim() || definition.label)
-  const effectiveSymbol = selectedTarget?.symbol ?? (symbol.trim() || definition.defaultSymbol ?? '')
+  const effectiveSymbol = selectedTarget?.symbol ?? (symbol.trim() || (definition.defaultSymbol ?? ''))
   const targetAverage = selectedTarget ? ownerWeightedAverageCostSar(selectedTarget, SELF_ID) : null
   const existingEligible = (asset: Holding) => asset.kind === definition.kind && (!asset.assetTypeId || asset.assetTypeId === assetTypeId) && !asset.ownership.some(s => s.ownerId !== SELF_ID && s.quantity > 0)
   const sourceEligible = (asset: Holding) => asset.kind === 'cash' && ownerQuantity(asset, SELF_ID) > 0
