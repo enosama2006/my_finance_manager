@@ -6,3 +6,11 @@ dist/
 .env
 .env.*
 !.env.example
+
+# Local MyFinMan database files. Never commit real financial data.
+data/*.sqlite
+data/*.sqlite-wal
+data/*.sqlite-shm
+data/*.db
+data/*.db-wal
+data/*.db-shm
