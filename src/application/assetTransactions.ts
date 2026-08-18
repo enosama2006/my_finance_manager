@@ -64,7 +64,6 @@ export function setAssetOpeningBalance(state: FinanceState, input: SetAssetOpeni
   const isSar = asset.symbol.toUpperCase() === 'SAR'
   const currentKnownUnitCost = ownerWeightedAverageCostSar(asset, input.ownerId)
   const explicitlyKnown = input.historicalBasisKnown === true
-  // Existing known basis can continue; a new non-SAR opening only accepts unitCost as basis when explicitly marked known.
   const unitCost = currentKnownUnitCost ?? (isSar ? 1 : explicitlyKnown ? input.unitCostSar : undefined)
   const openingBasisSar = unitCost == null ? null : input.quantity * unitCost
   const openingReportingValueSar = round2(input.quantity * asset.marketPriceSar)
@@ -118,10 +117,11 @@ export function transferBetweenAssets(state: FinanceState, input: TransferBetwee
   const sourceOwned = ownerQuantity(source, input.ownerId)
   if (input.quantity > sourceOwned + 1e-9) throw new Error('الرصيد غير كافٍ')
   const sourceCost = ownerWeightedAverageCostSar(source, input.ownerId)
+  const knownSourceCost = sourceCost ?? undefined
   const transferredBasis = sourceCost == null ? undefined : input.quantity * sourceCost
-  const nextSource = setOwnerQuantity(source, input.ownerId, round2(sourceOwned - input.quantity), sourceCost)
+  const nextSource = setOwnerQuantity(source, input.ownerId, round2(sourceOwned - input.quantity), knownSourceCost)
   const targetOwned = ownerQuantity(target, input.ownerId)
-  const nextTarget = setOwnerQuantity(target, input.ownerId, round2(targetOwned + input.quantity), sourceCost, transferredBasis)
+  const nextTarget = setOwnerQuantity(target, input.ownerId, round2(targetOwned + input.quantity), knownSourceCost, transferredBasis)
   const tx: LedgerTransaction = { id: id('tx'), version: 1, status: 'posted', revisions: [], at: now(), kind: 'real_transfer', title: `نقل ${source.symbol}: ${source.name} ← ${target.name}`, amountSar: round2(input.quantity * source.marketPriceSar), costBasisSar: transferredBasis ?? null, ownerId: input.ownerId, sourceHoldingId: source.id, targetHoldingId: target.id, sourceQuantity: round2(input.quantity), targetQuantity: round2(input.quantity), note: input.note?.trim() || (transferredBasis == null ? 'نقل بين أصلين نقديين بنفس العملة؛ التكلفة التاريخية للمصدر غير معروفة فبقيت غير معروفة.' : 'نقل بين أصلين نقديين بنفس العملة؛ لا يحقق ربحًا أو خسارة.') }
   return { ...state, schemaVersion: 5, holdings: state.holdings.map(h => h.id === source.id ? nextSource : h.id === target.id ? nextTarget : h), ledger: [tx, ...state.ledger] }
 }
