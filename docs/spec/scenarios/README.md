@@ -10,6 +10,7 @@ For the current cross-scenario reconciliation and simulation, read:
 - `SCENARIO-RECONCILIATION-2026-08-18.md`
 - ADR-004 — Group -> Asset structural baseline
 - ADR-005 — Instrument identity / Asset instances / lots / investment flows refinement
+- ADR-006 — Tree-first UX / unified Parties / leaf actions / Modal-Sheet / form lifecycle
 
 ## Scenario inventory
 
@@ -24,9 +25,9 @@ For the current cross-scenario reconciliation and simulation, read:
 | SCN-007 | Cost flow / acquisition chain | Facts valid; AcquisitionChain persistence Draft |
 | SCN-008 | Valuation role & performance recognition | Facts valid; historical FX basis refinement tracked #38 |
 | SCN-009 | Portfolio lifecycle / CapitalCycle / Position | Facts valid; lifecycle implementation partial |
-| SCN-010 | Expense tree & Portfolio consumption | Facts valid; old Account onboarding terminology mapped to Cash Asset |
+| SCN-010 | Expense tree & Portfolio consumption | Facts valid; leaf-only category posting refined by ADR-006 |
 | SCN-011 | Place-first Account purchase/export | **Place/Account architecture Superseded**; purchase/export facts retained |
-| SCN-012 | Expense necessity / beneficiaries / tree UX | Valid; payment source is Cash Asset |
+| SCN-012 | Expense necessity / beneficiaries / tree UX | Valid; beneficiary identity now converges on canonical Party via ADR-006 |
 | SCN-013 | User Account Groups | **Group->Account->Holding Superseded** by Group->Asset |
 | SCN-014 | Audited transaction correction | Approved invariant; financial replay coverage expanded in schema-v5 |
 | SCN-015 | Opening state correction/void | Approved; key is Asset+Owner, FX historical basis may be unknown |
@@ -37,6 +38,7 @@ For the current cross-scenario reconciliation and simulation, read:
 | SCN-020 | Account Cascader | **Account terminal Superseded** by Group->eligible Asset cascader #33 |
 | SCN-021 | Group->Asset & full correction | Current Approved structural baseline; refined by ADR-005 |
 | SCN-022 | Real investment account, funds, distributions & DCA | Real snapshot validation; Draft target refinements #34/#36/#37/#38 |
+| SCN-023 | Tree-first Parties, Portfolios, leaf actions & form lifecycle | Approved product direction; implementation tracked #40-#44 |
 
 ## Rule for future scenarios
 
