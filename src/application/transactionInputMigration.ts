@@ -26,22 +26,13 @@ function inferPurchaseInput(state: FinanceState, tx: LedgerTransaction): AssetPu
   const source = state.holdings.find(h => h.id === tx.sourceHoldingId)
   const target = state.holdings.find(h => h.id === tx.targetHoldingId)
   if (!source || !target) return undefined
+  const legacyTargetAccount = target.accountId ? state.accounts.find(a => a.id === target.accountId) : undefined
   return {
-    kind: 'asset_purchase',
-    sourceAccountId: source.accountId,
-    sourceHoldingId: source.id,
-    ownerId: tx.ownerId,
-    amountPaid: tx.sourceQuantity,
-    targetAccountId: target.accountId,
-    assetTypeId: inferAssetTypeId(tx, state),
-    name: target.name,
-    symbol: target.symbol,
-    quantity: tx.targetQuantity,
-    extraCostsSar: tx.feesSar,
-    portfolioId: tx.portfolioId,
-    location: target.location,
-    marketUnitPriceSar: target.marketPriceSar,
-    marketSource: target.valuationSource,
+    kind: 'asset_purchase', sourceAccountId: source.accountId, sourceHoldingId: source.id, ownerId: tx.ownerId, amountPaid: tx.sourceQuantity,
+    targetGroupId: target.groupId ?? legacyTargetAccount?.groupId, targetAccountId: target.accountId,
+    assetTypeId: inferAssetTypeId(tx, state), name: target.name, symbol: target.symbol, quantity: tx.targetQuantity,
+    extraCostsSar: tx.feesSar, portfolioId: tx.portfolioId, location: target.location,
+    marketUnitPriceSar: target.marketPriceSar, marketSource: target.valuationSource,
   }
 }
 
@@ -51,13 +42,11 @@ function normalizeCurrency(currency: string | undefined): string | undefined {
   return ascii || currency.trim().toUpperCase()
 }
 
-/**
- * Compatibility migration. It never posts a financial event: it only enriches
- * legacy snapshots with user-intent metadata and normalizes textual currency codes.
- */
+/** Compatibility-only metadata hydration. Never posts a financial event. */
 export function hydrateTransactionUserInputs(state: FinanceState): FinanceState {
   const accounts = state.accounts.map(account => ({ ...account, currency: normalizeCurrency(account.currency) }))
-  const base = { ...state, accounts }
+  const holdings = state.holdings.map(asset => ({ ...asset, currency: normalizeCurrency(asset.currency) }))
+  const base = { ...state, accounts, holdings }
   const ledger = base.ledger.map(tx => tx.userInput ? tx : ({ ...tx, userInput: inferPurchaseInput(base, tx) }))
   return { ...base, ledger }
 }

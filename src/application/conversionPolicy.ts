@@ -11,9 +11,11 @@ export interface ManagedConversionPreview {
   realizationState: 'realized_to_cash' | 'cost_continues'
 }
 
-function sourceAvailable(state: FinanceState, input: ConversionInput): number {
+function sourceAvailable(state: FinanceState, input: ConversionInput) {
   if (!input.sourcePortfolioId) return availableQuantity(state, input.sourceHoldingId, input.ownerId)
-  return state.portfolioSlices.filter(s => s.holdingId === input.sourceHoldingId && s.ownerId === input.ownerId && s.portfolioId === input.sourcePortfolioId).reduce((sum, s) => sum + s.quantity, 0)
+  return state.portfolioSlices
+    .filter(s => s.holdingId === input.sourceHoldingId && s.ownerId === input.ownerId && s.portfolioId === input.sourcePortfolioId)
+    .reduce((sum, s) => sum + s.quantity, 0)
 }
 
 export function previewManagedConversion(state: FinanceState, input: ConversionInput): ManagedConversionPreview {
@@ -29,13 +31,17 @@ export function previewManagedConversion(state: FinanceState, input: ConversionI
   const realizedGainLossSar = isCashExit && sourceCostBasisSar != null ? round2(targetMarketValueSar - feesSar - sourceCostBasisSar) : null
   const propagatedTargetBasisSar = !isCashExit && sourceCostBasisSar != null ? round2(sourceCostBasisSar + feesSar) : null
   return {
-    sourceCostBasisSar, targetMarketValueSar, feesSar, realizedGainLossSar, propagatedTargetBasisSar,
+    sourceCostBasisSar,
+    targetMarketValueSar,
+    feesSar,
+    realizedGainLossSar,
+    propagatedTargetBasisSar,
     exchangeRate: round2(input.targetQuantity / input.sourceQuantity),
     realizationState: isCashExit ? 'realized_to_cash' : 'cost_continues',
   }
 }
 
-function reduceLots(lots: CostBasisLot[], ownerId: string, quantity: number): CostBasisLot[] {
+function reduceLots(lots: CostBasisLot[], ownerId: string, quantity: number) {
   const ownerLots = lots.filter(l => l.ownerId === ownerId)
   const total = ownerLots.reduce((sum, l) => sum + l.quantity, 0)
   if (quantity > total + 1e-9) throw new Error('Cost Basis لا يغطي الكمية')
@@ -56,8 +62,10 @@ export function applyManagedConversion(state: FinanceState, input: ConversionInp
   const preview = previewManagedConversion(state, input)
   const source = state.holdings.find(h => h.id === input.sourceHoldingId)!
   if (input.sourceQuantity > ownerQuantity(source, input.ownerId) + 1e-9) throw new Error('الرصيد غير كافٍ')
-  const targetAccount = state.accounts.find(a => a.id === input.targetAccountId && a.status === 'active')
-  if (!targetAccount) throw new Error('الحساب الهدف غير موجود')
+
+  let groupId = input.targetGroupId
+  if (!groupId && input.targetAccountId) groupId = state.accounts.find(a => a.id === input.targetAccountId)?.groupId
+  if (groupId && !(state.accountGroups ?? []).some(g => g.id === groupId && g.status === 'active')) throw new Error('المجموعة الهدف غير موجودة أو مؤرشفة')
 
   const updatedSource: Holding = {
     ...source,
@@ -66,9 +74,7 @@ export function applyManagedConversion(state: FinanceState, input: ConversionInp
     costLots: reduceLots(source.costLots, input.ownerId, input.sourceQuantity),
   }
 
-  const targetBasisSar = preview.realizationState === 'cost_continues'
-    ? preview.propagatedTargetBasisSar
-    : preview.targetMarketValueSar
+  const targetBasisSar = preview.realizationState === 'cost_continues' ? preview.propagatedTargetBasisSar : preview.targetMarketValueSar
   const targetId = `holding-${crypto.randomUUID()}`
   const target: Holding = {
     id: targetId,
@@ -78,10 +84,13 @@ export function applyManagedConversion(state: FinanceState, input: ConversionInp
     nativeUnit: input.targetUnit,
     quantity: input.targetQuantity,
     marketPriceSar: input.targetUnitValueSarAtExecution,
-    costLots: [{ id: `lot-${crypto.randomUUID()}`, ownerId: input.ownerId, quantity: input.targetQuantity, unitCostSar: targetBasisSar == null ? undefined : round2(targetBasisSar / input.targetQuantity), acquiredAt: at }],
+    costLots: [{ id: `lot-${crypto.randomUUID()}`, ownerId: input.ownerId, quantity: input.targetQuantity, unitCostSar: targetBasisSar == null ? undefined : targetBasisSar / input.targetQuantity, acquiredAt: at }],
     valuationMethod: input.targetKind === 'cash' ? (input.targetSymbol.toUpperCase() === 'SAR' ? 'nominal' : 'fx') : 'market_quote',
-    valuationSource: 'execution', valuedAt: at, accountId: targetAccount.id, custodianId: targetAccount.custodianId,
-    location: input.targetLocation, ownership: [{ ownerId: input.ownerId, quantity: input.targetQuantity }],
+    valuationSource: 'execution',
+    valuedAt: at,
+    groupId: groupId || undefined,
+    location: input.targetLocation,
+    ownership: [{ ownerId: input.ownerId, quantity: input.targetQuantity }],
     performanceRole: input.targetKind === 'cash' ? 'transactional_cash' : 'investment',
     acquisitionJourney: preview.realizationState === 'cost_continues' ? [...(source.acquisitionJourney ?? [source.name]), input.targetName] : [input.targetName],
   }
@@ -100,16 +109,43 @@ export function applyManagedConversion(state: FinanceState, input: ConversionInp
   if (destinationPortfolio) slices = [...slices, { id: `slice-${crypto.randomUUID()}`, portfolioId: destinationPortfolio, holdingId: targetId, ownerId: input.ownerId, quantity: input.targetQuantity }]
 
   const tx: LedgerTransaction = {
-    id: `tx-${crypto.randomUUID()}`, version: 1, status: 'posted', revisions: [], at, kind: 'conversion',
+    id: `tx-${crypto.randomUUID()}`,
+    version: 1,
+    status: 'posted',
+    revisions: [],
+    at,
+    kind: 'conversion',
     title: `${source.symbol} ← ${input.targetSymbol.toUpperCase()}`,
-    amountSar: preview.targetMarketValueSar, ownerId: input.ownerId,
-    sourceHoldingId: source.id, targetHoldingId: targetId, sourceQuantity: input.sourceQuantity, targetQuantity: input.targetQuantity,
-    exchangeRate: preview.exchangeRate, feesSar: preview.feesSar || undefined, realizedGainLossSar: preview.realizedGainLossSar,
+    amountSar: preview.targetMarketValueSar,
+    ownerId: input.ownerId,
+    sourceHoldingId: source.id,
+    targetHoldingId: targetId,
+    sourceQuantity: input.sourceQuantity,
+    targetQuantity: input.targetQuantity,
+    exchangeRate: preview.exchangeRate,
+    feesSar: preview.feesSar || undefined,
+    realizedGainLossSar: preview.realizedGainLossSar,
     portfolioId: destinationPortfolio,
+    userInput: {
+      kind: 'conversion',
+      sourceHoldingId: input.sourceHoldingId,
+      sourcePortfolioId: input.sourcePortfolioId,
+      targetPortfolioId: input.targetPortfolioId,
+      targetSymbol: input.targetSymbol.toUpperCase(),
+      targetName: input.targetName,
+      targetKind: input.targetKind,
+      targetUnit: input.targetUnit,
+      sourceQuantity: input.sourceQuantity,
+      targetQuantity: input.targetQuantity,
+      targetUnitValueSarAtExecution: input.targetUnitValueSarAtExecution,
+      feesSar: input.feesSar,
+      ownerId: input.ownerId,
+      targetGroupId: groupId || undefined,
+      targetLocation: input.targetLocation,
+    },
     note: preview.realizationState === 'realized_to_cash'
       ? 'تم التسييل إلى نقد؛ أصبح فرق التكلفة مقابل صافي النقد ربحًا/خسارة محققة.'
       : 'تحول أصل إلى أصل دون خروج نهائي إلى نقد؛ استمرت التكلفة الاقتصادية إلى الأصل الجديد ولم يُسجل ربح نقدي محقق.',
   }
-
-  return { ...state, holdings: state.holdings.map(h => h.id === source.id ? updatedSource : h).concat(target), portfolioSlices: slices, ledger: [tx, ...state.ledger] }
+  return { ...state, schemaVersion: 5, holdings: state.holdings.map(h => h.id === source.id ? updatedSource : h).concat(target), portfolioSlices: slices, ledger: [tx, ...state.ledger] }
 }

@@ -3,220 +3,30 @@ import { availableQuantity, ownerQuantity, ownerWeightedAverageCostSar, round2 }
 import type { FinanceState, Holding, LedgerTransaction, ValuationMethod } from '../domain/types'
 import type { MarketQuote } from '../data/marketData'
 
-const id = (prefix: string) => `${prefix}-${crypto.randomUUID()}`
-const now = () => new Date().toISOString()
+const id=(prefix:string)=>`${prefix}-${crypto.randomUUID()}`;const now=()=>new Date().toISOString()
+function positive(value:number,label:string){if(!Number.isFinite(value)||value<=0)throw new Error(`${label} يجب أن يكون أكبر من صفر`)}
+function assertGroup(state:FinanceState,groupId?:string){if(groupId&&!(state.accountGroups??[]).some(g=>g.id===groupId&&g.status==='active'))throw new Error('مجموعة الأصل غير موجودة أو مؤرشفة')}
+function reduceOwnerLots(holding:Holding,ownerId:string,quantity:number){const lots=holding.costLots.filter(l=>l.ownerId===ownerId);const total=lots.reduce((sum,lot)=>sum+lot.quantity,0);if(quantity>total+1e-9)throw new Error('تكلفة الاقتناء لا تغطي الكمية المطلوبة');const remaining=Math.max(0,total-quantity);if(remaining<=1e-9)return holding.costLots.filter(l=>l.ownerId!==ownerId);let assigned=0,seen=0;return holding.costLots.map(lot=>{if(lot.ownerId!==ownerId)return lot;seen+=1;const nextQuantity=seen===lots.length?round2(remaining-assigned):round2((lot.quantity/total)*remaining);assigned=round2(assigned+nextQuantity);return{...lot,quantity:nextQuantity}}).filter(lot=>lot.quantity>0)}
+function debitOwnerHolding(holding:Holding,ownerId:string,quantity:number):Holding{if(quantity>ownerQuantity(holding,ownerId)+1e-9)throw new Error('الرصيد غير كافٍ');return{...holding,quantity:round2(holding.quantity-quantity),ownership:holding.ownership.map(s=>s.ownerId===ownerId?{...s,quantity:round2(s.quantity-quantity)}:s).filter(s=>s.quantity>0),costLots:reduceOwnerLots(holding,ownerId,quantity)}}
+function consumePortfolioFunding(state:FinanceState,input:SimplifiedPurchaseInput):FinanceState{if(!input.portfolioId){if(input.amountPaid>availableQuantity(state,input.sourceHoldingId,input.ownerId)+1e-9)throw new Error('المبلغ الحر غير كافٍ؛ جزء من هذا الرصيد محجوز لمحافظ أخرى');return state}const allocated=state.portfolioSlices.filter(s=>s.portfolioId===input.portfolioId&&s.holdingId===input.sourceHoldingId&&s.ownerId===input.ownerId).reduce((sum,s)=>sum+s.quantity,0);const free=availableQuantity(state,input.sourceHoldingId,input.ownerId);if(input.amountPaid>allocated+free+1e-9)throw new Error('مصدر الدفع لا يغطي هذا الشراء ضمن المحفظة المختارة');let remaining=Math.min(input.amountPaid,allocated);return{...state,portfolioSlices:state.portfolioSlices.map(slice=>{if(remaining<=0||slice.portfolioId!==input.portfolioId||slice.holdingId!==input.sourceHoldingId||slice.ownerId!==input.ownerId)return slice;const used=Math.min(slice.quantity,remaining);remaining=round2(remaining-used);return{...slice,quantity:round2(slice.quantity-used)}}).filter(slice=>slice.quantity>0)}}
+function valuationMethodForFallback(assetTypeId:AssetTypeId):ValuationMethod{const def=assetTypeById(assetTypeId);if(!def)return'cost_fallback';if(def.quoteStrategy==='contractual')return'contractual';return'cost_fallback'}
 
-function positive(value: number, label: string) {
-  if (!Number.isFinite(value) || value <= 0) throw new Error(`${label} يجب أن يكون أكبر من صفر`)
+export interface SimplifiedPurchaseInput{sourceHoldingId:string;ownerId:string;amountPaid:number;targetGroupId?:string;/** legacy correction/import compatibility */targetAccountId?:string;assetTypeId:AssetTypeId;name:string;symbol?:string;quantity:number;extraCostsSar?:number;portfolioId?:string;location?:string;marketQuote?:MarketQuote|null}
+export interface PurchasePreview{sourceUnit:string;sourceCostBasisSar:number;extraCostsSar:number;totalCostBasisSar:number;effectiveUnitCostSar:number;marketUnitPriceSar:number|null;unrealizedAtPurchaseSar:number|null}
+export function previewSimplifiedPurchase(state:FinanceState,input:SimplifiedPurchaseInput):PurchasePreview{positive(input.amountPaid,'المبلغ المدفوع');positive(input.quantity,'الكمية المشتراة');const source=state.holdings.find(h=>h.id===input.sourceHoldingId&&!h.archived);if(!source||source.kind!=='cash')throw new Error('اختر أصلًا نقديًا صالحًا للدفع');const unitCost=ownerWeightedAverageCostSar(source,input.ownerId);if(unitCost==null)throw new Error('تكلفة أصل الدفع غير معروفة');const sourceCostBasisSar=round2(input.amountPaid*unitCost);const extraCostsSar=round2(Math.max(0,input.extraCostsSar??0));const totalCostBasisSar=round2(sourceCostBasisSar+extraCostsSar);const effectiveUnitCostSar=round2(totalCostBasisSar/input.quantity);const marketUnitPriceSar=input.marketQuote?.unitPriceSar??null;const unrealizedAtPurchaseSar=marketUnitPriceSar==null?null:round2(input.quantity*marketUnitPriceSar-totalCostBasisSar);return{sourceUnit:source.nativeUnit,sourceCostBasisSar,extraCostsSar,totalCostBasisSar,effectiveUnitCostSar,marketUnitPriceSar,unrealizedAtPurchaseSar}}
+
+export function purchaseAssetSimplified(state:FinanceState,input:SimplifiedPurchaseInput):FinanceState{
+ const def=assetTypeById(input.assetTypeId);if(!def)throw new Error('نوع الأصل غير معروف في دليل الأصول');if(!input.name.trim())throw new Error('اسم الأصل مطلوب')
+ const legacyTargetAccount=input.targetAccountId?state.accounts.find(a=>a.id===input.targetAccountId):undefined
+ let groupId=input.targetGroupId;if(!groupId&&legacyTargetAccount)groupId=legacyTargetAccount.groupId;assertGroup(state,groupId)
+ const preview=previewSimplifiedPurchase(state,input);const source=state.holdings.find(h=>h.id===input.sourceHoldingId&&!h.archived)!;if(input.amountPaid>ownerQuantity(source,input.ownerId)+1e-9)throw new Error('الرصيد غير كافٍ')
+ let next=consumePortfolioFunding(state,input);const updatedSource=debitOwnerHolding(source,input.ownerId,input.amountPaid);next={...next,schemaVersion:5,holdings:next.holdings.map(h=>h.id===source.id?updatedSource:h)}
+ const holdingId=id('holding'),positionId=id('pos');const symbol=(input.symbol?.trim()||def.defaultSymbol||input.name.slice(0,5)).toUpperCase();const marketPriceSar=input.marketQuote?.unitPriceSar??preview.effectiveUnitCostSar
+ const holding:Holding={id:holdingId,symbol,name:input.name.trim(),kind:def.kind,assetTypeId:def.id,nativeUnit:def.defaultUnit,quantity:input.quantity,marketPriceSar,costLots:[{id:id('lot'),ownerId:input.ownerId,quantity:input.quantity,unitCostSar:preview.effectiveUnitCostSar,acquiredAt:now()}],valuationMethod:input.marketQuote?'market_quote':valuationMethodForFallback(def.id),valuationSource:input.marketQuote?.source??'acquisition-cost-fallback',valuedAt:input.marketQuote?.asOf??now(),groupId:groupId||undefined,accountId:legacyTargetAccount?.id,custodianId:legacyTargetAccount?.custodianId,location:input.location?.trim()||undefined,ownership:[{ownerId:input.ownerId,quantity:input.quantity}],performanceRole:def.defaultPerformanceRole,positionId,acquisitionJourney:[`دفع ${input.amountPaid} ${source.nativeUnit} من ${source.name}`,input.name.trim()]}
+ next={...next,holdings:[...next.holdings,holding],positions:[...(next.positions??[]),{id:positionId,name:input.name.trim(),ownerId:input.ownerId,portfolioId:input.portfolioId,holdingIds:[holdingId],openedAt:now(),status:'open',performanceRole:def.defaultPerformanceRole,initialCostBasisSar:preview.totalCostBasisSar,realizedGainLossSar:0,note:'التكلفة محفوظة تاريخيًا. فرق القيمة السوقية يبقى غير محقق حتى البيع/التسييل الحقيقي.'}]}
+ if(input.portfolioId)next={...next,portfolioSlices:[...next.portfolioSlices,{id:id('slice'),portfolioId:input.portfolioId,holdingId,ownerId:input.ownerId,quantity:input.quantity}]}
+ const tx:LedgerTransaction={id:id('tx'),version:1,status:'posted',revisions:[],at:now(),kind:'asset_purchase',title:`شراء ${input.name.trim()}`,amountSar:preview.totalCostBasisSar,ownerId:input.ownerId,sourceHoldingId:source.id,targetHoldingId:holdingId,sourceQuantity:input.amountPaid,targetQuantity:input.quantity,feesSar:preview.extraCostsSar||undefined,positionId,portfolioId:input.portfolioId,userInput:{kind:'asset_purchase',sourceAccountId:source.accountId,sourceHoldingId:source.id,ownerId:input.ownerId,amountPaid:input.amountPaid,targetGroupId:groupId||undefined,targetAccountId:input.targetAccountId,assetTypeId:def.id,name:input.name.trim(),symbol,quantity:input.quantity,extraCostsSar:preview.extraCostsSar||undefined,portfolioId:input.portfolioId,location:input.location?.trim()||undefined,marketUnitPriceSar:marketPriceSar,marketSource:input.marketQuote?.source??holding.valuationSource},note:input.marketQuote?`التقييم السوقي جُلب من ${input.marketQuote.source}. الربح/الخسارة الحالية غير محققة.`:'لم يتوفر Quote سوقي لحظة الشراء؛ بدأ التقييم مؤقتًا من تكلفة الاقتناء وسيُحدّث عند توفر مزود سعر.'}
+ return{...next,ledger:[tx,...next.ledger]}
 }
 
-function reduceOwnerLots(holding: Holding, ownerId: string, quantity: number) {
-  const lots = holding.costLots.filter(l => l.ownerId === ownerId)
-  const total = lots.reduce((sum, lot) => sum + lot.quantity, 0)
-  if (quantity > total + 1e-9) throw new Error('تكلفة الاقتناء لا تغطي الكمية المطلوبة')
-  const remaining = Math.max(0, total - quantity)
-  if (remaining <= 1e-9) return holding.costLots.filter(l => l.ownerId !== ownerId)
-  let assigned = 0
-  let seen = 0
-  return holding.costLots.map(lot => {
-    if (lot.ownerId !== ownerId) return lot
-    seen += 1
-    const nextQuantity = seen === lots.length ? round2(remaining - assigned) : round2((lot.quantity / total) * remaining)
-    assigned = round2(assigned + nextQuantity)
-    return { ...lot, quantity: nextQuantity }
-  }).filter(lot => lot.quantity > 0)
-}
-
-function debitOwnerHolding(holding: Holding, ownerId: string, quantity: number): Holding {
-  if (quantity > ownerQuantity(holding, ownerId) + 1e-9) throw new Error('الرصيد غير كافٍ')
-  return {
-    ...holding,
-    quantity: round2(holding.quantity - quantity),
-    ownership: holding.ownership.map(s => s.ownerId === ownerId ? { ...s, quantity: round2(s.quantity - quantity) } : s).filter(s => s.quantity > 0),
-    costLots: reduceOwnerLots(holding, ownerId, quantity),
-  }
-}
-
-function consumePortfolioFunding(state: FinanceState, input: SimplifiedPurchaseInput): FinanceState {
-  if (!input.portfolioId) {
-    if (input.amountPaid > availableQuantity(state, input.sourceHoldingId, input.ownerId) + 1e-9) {
-      throw new Error('المبلغ الحر غير كافٍ؛ جزء من هذا الرصيد محجوز لمحافظ أخرى')
-    }
-    return state
-  }
-
-  const allocated = state.portfolioSlices
-    .filter(s => s.portfolioId === input.portfolioId && s.holdingId === input.sourceHoldingId && s.ownerId === input.ownerId)
-    .reduce((sum, s) => sum + s.quantity, 0)
-  const free = availableQuantity(state, input.sourceHoldingId, input.ownerId)
-  if (input.amountPaid > allocated + free + 1e-9) throw new Error('مصدر الدفع لا يغطي هذا الشراء ضمن المحفظة المختارة')
-
-  let remaining = Math.min(input.amountPaid, allocated)
-  return {
-    ...state,
-    portfolioSlices: state.portfolioSlices.map(slice => {
-      if (remaining <= 0 || slice.portfolioId !== input.portfolioId || slice.holdingId !== input.sourceHoldingId || slice.ownerId !== input.ownerId) return slice
-      const used = Math.min(slice.quantity, remaining)
-      remaining = round2(remaining - used)
-      return { ...slice, quantity: round2(slice.quantity - used) }
-    }).filter(slice => slice.quantity > 0),
-  }
-}
-
-function valuationMethodForFallback(assetTypeId: AssetTypeId): ValuationMethod {
-  const def = assetTypeById(assetTypeId)
-  if (!def) return 'cost_fallback'
-  if (def.quoteStrategy === 'contractual') return 'contractual'
-  return 'cost_fallback'
-}
-
-export interface SimplifiedPurchaseInput {
-  sourceHoldingId: string
-  ownerId: string
-  amountPaid: number
-  targetAccountId: string
-  assetTypeId: AssetTypeId
-  name: string
-  symbol?: string
-  quantity: number
-  extraCostsSar?: number
-  portfolioId?: string
-  location?: string
-  marketQuote?: MarketQuote | null
-}
-
-export interface PurchasePreview {
-  sourceUnit: string
-  sourceCostBasisSar: number
-  extraCostsSar: number
-  totalCostBasisSar: number
-  effectiveUnitCostSar: number
-  marketUnitPriceSar: number | null
-  unrealizedAtPurchaseSar: number | null
-}
-
-export function previewSimplifiedPurchase(state: FinanceState, input: SimplifiedPurchaseInput): PurchasePreview {
-  positive(input.amountPaid, 'المبلغ المدفوع')
-  positive(input.quantity, 'الكمية المشتراة')
-  const source = state.holdings.find(h => h.id === input.sourceHoldingId && !h.archived)
-  if (!source || source.kind !== 'cash') throw new Error('اختر رصيدًا نقديًا صالحًا للدفع')
-  const unitCost = ownerWeightedAverageCostSar(source, input.ownerId)
-  if (unitCost == null) throw new Error('تكلفة رصيد الدفع غير معروفة')
-  const sourceCostBasisSar = round2(input.amountPaid * unitCost)
-  const extraCostsSar = round2(Math.max(0, input.extraCostsSar ?? 0))
-  const totalCostBasisSar = round2(sourceCostBasisSar + extraCostsSar)
-  const effectiveUnitCostSar = round2(totalCostBasisSar / input.quantity)
-  const marketUnitPriceSar = input.marketQuote?.unitPriceSar ?? null
-  const unrealizedAtPurchaseSar = marketUnitPriceSar == null ? null : round2(input.quantity * marketUnitPriceSar - totalCostBasisSar)
-  return { sourceUnit: source.nativeUnit, sourceCostBasisSar, extraCostsSar, totalCostBasisSar, effectiveUnitCostSar, marketUnitPriceSar, unrealizedAtPurchaseSar }
-}
-
-export function purchaseAssetSimplified(state: FinanceState, input: SimplifiedPurchaseInput): FinanceState {
-  const def = assetTypeById(input.assetTypeId)
-  if (!def) throw new Error('نوع الأصل غير معروف في دليل الأصول')
-  if (!input.name.trim()) throw new Error('اسم الأصل مطلوب')
-  const preview = previewSimplifiedPurchase(state, input)
-  const source = state.holdings.find(h => h.id === input.sourceHoldingId && !h.archived)!
-  if (input.amountPaid > ownerQuantity(source, input.ownerId) + 1e-9) throw new Error('الرصيد غير كافٍ')
-  const account = state.accounts.find(a => a.id === input.targetAccountId && a.status === 'active')
-  if (!account) throw new Error('حساب حفظ الأصل غير موجود أو غير نشط')
-
-  let next = consumePortfolioFunding(state, input)
-  const updatedSource = debitOwnerHolding(source, input.ownerId, input.amountPaid)
-  next = { ...next, holdings: next.holdings.map(h => h.id === source.id ? updatedSource : h) }
-
-  const holdingId = id('holding')
-  const positionId = id('pos')
-  const symbol = (input.symbol?.trim() || def.defaultSymbol || input.name.slice(0, 5)).toUpperCase()
-  const marketPriceSar = input.marketQuote?.unitPriceSar ?? preview.effectiveUnitCostSar
-  const holding: Holding = {
-    id: holdingId,
-    symbol,
-    name: input.name.trim(),
-    kind: def.kind,
-    assetTypeId: def.id,
-    nativeUnit: def.defaultUnit,
-    quantity: input.quantity,
-    marketPriceSar,
-    costLots: [{ id: id('lot'), ownerId: input.ownerId, quantity: input.quantity, unitCostSar: preview.effectiveUnitCostSar, acquiredAt: now() }],
-    valuationMethod: input.marketQuote ? 'market_quote' : valuationMethodForFallback(def.id),
-    valuationSource: input.marketQuote?.source ?? 'acquisition-cost-fallback',
-    valuedAt: input.marketQuote?.asOf ?? now(),
-    accountId: account.id,
-    custodianId: account.custodianId,
-    location: input.location?.trim() || undefined,
-    ownership: [{ ownerId: input.ownerId, quantity: input.quantity }],
-    performanceRole: def.defaultPerformanceRole,
-    positionId,
-    acquisitionJourney: [`دفع ${input.amountPaid} ${source.nativeUnit} من ${source.name}`, input.name.trim()],
-  }
-
-  next = {
-    ...next,
-    holdings: [...next.holdings, holding],
-    positions: [...(next.positions ?? []), {
-      id: positionId,
-      name: input.name.trim(),
-      ownerId: input.ownerId,
-      portfolioId: input.portfolioId,
-      holdingIds: [holdingId],
-      openedAt: now(),
-      status: 'open',
-      performanceRole: def.defaultPerformanceRole,
-      initialCostBasisSar: preview.totalCostBasisSar,
-      realizedGainLossSar: 0,
-      note: 'التكلفة محفوظة تاريخيًا. فرق القيمة السوقية يبقى غير محقق حتى البيع/التسييل الحقيقي.',
-    }],
-  }
-
-  if (input.portfolioId) {
-    next = {
-      ...next,
-      portfolioSlices: [...next.portfolioSlices, { id: id('slice'), portfolioId: input.portfolioId, holdingId, ownerId: input.ownerId, quantity: input.quantity }],
-    }
-  }
-
-  const tx: LedgerTransaction = {
-    id: id('tx'), version: 1, status: 'posted', revisions: [], at: now(), kind: 'asset_purchase',
-    title: `شراء ${input.name.trim()}`, amountSar: preview.totalCostBasisSar, ownerId: input.ownerId,
-    sourceHoldingId: source.id, targetHoldingId: holdingId, sourceQuantity: input.amountPaid, targetQuantity: input.quantity,
-    feesSar: preview.extraCostsSar || undefined, positionId, portfolioId: input.portfolioId,
-    userInput: {
-      kind: 'asset_purchase',
-      sourceAccountId: source.accountId,
-      sourceHoldingId: source.id,
-      ownerId: input.ownerId,
-      amountPaid: input.amountPaid,
-      targetAccountId: account.id,
-      assetTypeId: def.id,
-      name: input.name.trim(),
-      symbol,
-      quantity: input.quantity,
-      extraCostsSar: preview.extraCostsSar || undefined,
-      portfolioId: input.portfolioId,
-      location: input.location?.trim() || undefined,
-      marketUnitPriceSar: marketPriceSar,
-      marketSource: input.marketQuote?.source ?? holding.valuationSource,
-    },
-    note: input.marketQuote
-      ? `التقييم السوقي جُلب من ${input.marketQuote.source}. الربح/الخسارة الحالية غير محققة.`
-      : 'لم يتوفر Quote سوقي لحظة الشراء؛ بدأ التقييم مؤقتًا من تكلفة الاقتناء وسيُحدّث عند توفر مزود سعر.',
-  }
-  return { ...next, ledger: [tx, ...next.ledger] }
-}
-
-export function applyHoldingMarketQuote(state: FinanceState, holdingId: string, quote: MarketQuote): FinanceState {
-  if (!Number.isFinite(quote.unitPriceSar) || quote.unitPriceSar <= 0) throw new Error('سعر السوق غير صالح')
-  const holding = state.holdings.find(h => h.id === holdingId && !h.archived)
-  if (!holding) throw new Error('الأصل غير موجود')
-  return {
-    ...state,
-    holdings: state.holdings.map(h => h.id === holdingId ? {
-      ...h,
-      marketPriceSar: quote.unitPriceSar,
-      valuationMethod: 'market_quote',
-      valuationSource: quote.source,
-      valuedAt: quote.asOf,
-    } : h),
-  }
-}
+export function applyHoldingMarketQuote(state:FinanceState,holdingId:string,quote:MarketQuote):FinanceState{if(!Number.isFinite(quote.unitPriceSar)||quote.unitPriceSar<=0)throw new Error('سعر السوق غير صالح');const holding=state.holdings.find(h=>h.id===holdingId&&!h.archived);if(!holding)throw new Error('الأصل غير موجود');return{...state,holdings:state.holdings.map(h=>h.id===holdingId?{...h,marketPriceSar:quote.unitPriceSar,valuationMethod:'market_quote',valuationSource:quote.source,valuedAt:quote.asOf}:h)}}

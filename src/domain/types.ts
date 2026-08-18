@@ -24,7 +24,7 @@ export interface Party {
   type: 'person' | 'bank' | 'broker' | 'institution' | 'home' | 'place' | 'self'
 }
 
-/** User-defined organizational folder above accounts; it has no financial effect. */
+/** The only hierarchy/container in the wealth tree. */
 export interface AccountGroup {
   id: string
   name: string
@@ -33,8 +33,9 @@ export interface AccountGroup {
   description?: string
   createdAt: string
 }
+export type WealthGroup = AccountGroup
 
-/** Account is the real container that holds Holdings. groupId is organizational only. */
+/** LEGACY schema-v4 entity. New user flows do not create or require Account. */
 export interface Account {
   id: string
   name: string
@@ -54,6 +55,7 @@ export interface Account {
 export interface OwnershipShare { id?: string; ownerId: string; quantity: number }
 export interface CostBasisLot { id: string; ownerId: string; quantity: number; unitCostSar?: number; acquiredAt?: string }
 
+/** Canonical financial entity. It never contains another Asset; only Groups contain Assets. */
 export interface Holding {
   id: string
   symbol: string
@@ -67,8 +69,14 @@ export interface Holding {
   valuationMethod: ValuationMethod
   valuationSource?: string
   valuedAt?: string
-  accountId: string
-  custodianId: string
+  groupId?: string
+  accountId?: string
+  custodianId?: string
+  accountKind?: AccountKind
+  currency?: string
+  last4?: string
+  institutionName?: string
+  description?: string
   location?: string
   ownership: OwnershipShare[]
   archived?: boolean
@@ -76,6 +84,7 @@ export interface Holding {
   positionId?: string
   acquisitionJourney?: string[]
 }
+export type Asset = Holding
 
 export interface Portfolio {
   id: string
@@ -151,18 +160,15 @@ export interface CapitalCycle {
   note?: string
 }
 
-/**
- * Exact user-entered intent for an asset purchase. This is deliberately distinct
- * from the projected Holding/Ledger fields so a correction can reverse the old
- * projection and re-apply the corrected intent without inventing a transfer.
- */
+/** Exact user-entered purchase intent used by correction/reprojection. */
 export interface AssetPurchaseUserInput {
   kind: 'asset_purchase'
-  sourceAccountId: string
   sourceHoldingId: string
+  sourceAccountId?: string
   ownerId: string
   amountPaid: number
-  targetAccountId: string
+  targetGroupId?: string
+  targetAccountId?: string
   assetTypeId: string
   name: string
   symbol?: string
@@ -174,7 +180,26 @@ export interface AssetPurchaseUserInput {
   marketSource?: string
 }
 
-export type TransactionUserInput = AssetPurchaseUserInput
+/** Exact user-entered conversion intent. Needed to reverse/replay portfolio funding correctly. */
+export interface ConversionUserInput {
+  kind: 'conversion'
+  sourceHoldingId: string
+  sourcePortfolioId?: string
+  targetPortfolioId?: string
+  targetSymbol: string
+  targetName: string
+  targetKind: AssetKind
+  targetUnit: string
+  sourceQuantity: number
+  targetQuantity: number
+  targetUnitValueSarAtExecution: number
+  feesSar: number
+  ownerId: string
+  targetGroupId?: string
+  targetLocation?: string
+}
+
+export type TransactionUserInput = AssetPurchaseUserInput | ConversionUserInput
 
 export interface TransactionRevision {
   version: number
@@ -225,7 +250,6 @@ export interface LedgerTransaction {
   expenseBeneficiaryId?: string
   cycleId?: string
   positionId?: string
-  /** User-entered intent used for audited correction/reprojection. */
   userInput?: TransactionUserInput
 }
 
@@ -234,11 +258,14 @@ export interface Liability { id: string; name: string; ownerId: string; accountI
 export interface Claim { id: string; creditorOwnerId: string; debtorPartyId: string; symbol: string; nativeUnit: string; quantity: number; unitValueSar: number; status: 'open' | 'settled' }
 
 export interface FinanceState {
-  schemaVersion: 4
+  schemaVersion: 4 | 5
   costBasisMethod: 'weighted_average'
   parties: Party[]
+  /** Wealth groups. Historical property name retained for import compatibility. */
   accountGroups?: AccountGroup[]
+  /** Legacy only. New assets are not required to belong to accounts. */
   accounts: Account[]
+  /** Canonical assets. Historical property name retained for compatibility. */
   holdings: Holding[]
   portfolios: Portfolio[]
   portfolioSlices: PortfolioSlice[]
@@ -265,7 +292,8 @@ export interface ConversionInput {
   targetUnitValueSarAtExecution: number
   feesSar: number
   ownerId: string
-  targetAccountId: string
-  targetCustodianId: string
+  targetGroupId?: string
+  targetAccountId?: string
+  targetCustodianId?: string
   targetLocation?: string
 }
