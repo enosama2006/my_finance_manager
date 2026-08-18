@@ -130,8 +130,8 @@ export function createExpenseBeneficiary(state: FinanceState, input: CreateExpen
   // Mirror the beneficiary into state.parties so any FK to the beneficiary id resolves inside
   // the canonical Party store. Full de-duplication against existing Party rows by name is the
   // Family-C follow-up covered by INV-020 sub-test 1.
-  const partyType = input.kind === 'person' ? 'person' : 'group'
-  const mirroredParty = { id: beneficiaryId, name, type: partyType as const }
+  const partyType: Party['type'] = input.kind === 'person' ? 'person' : 'group'
+  const mirroredParty: Party = { id: beneficiaryId, name, type: partyType }
   return { ...state, parties: [...state.parties, mirroredParty], expenseBeneficiaries: [...beneficiaries(state), beneficiary] }
 }
 
