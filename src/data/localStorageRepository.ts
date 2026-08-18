@@ -1,47 +1,38 @@
 import type { Account, FinanceState, Holding } from '../domain/types'
 import type { FinanceRepository } from './repository'
 
-// New user-data namespace: intentionally does not reuse the old demo-seeded storage key.
-const STORAGE_KEY = 'myfinman-user-foundation-v1'
+// Legacy browser namespace retained as a non-destructive migration source.
+export const LEGACY_STORAGE_KEY = 'myfinman-user-foundation-v1'
 
-type LegacyFinanceStateV4 = Omit<FinanceState, 'accounts' | 'holdings'> & {
+type LegacyFinanceState = Omit<FinanceState, 'accounts' | 'holdings'> & {
   accounts: Array<Omit<Account, 'kind'> & { kind: Account['kind'] | 'cash' }>
   holdings: Array<Omit<Holding, 'kind'> & { kind: Holding['kind'] | 'currency' }>
 }
 
-function migrateCashModel(parsed: LegacyFinanceStateV4): FinanceState {
-  const accounts: Account[] = parsed.accounts.map((account) => ({
-    ...account,
-    kind: account.kind === 'cash' ? 'cash_container' : account.kind,
-  }))
-  const holdings: Holding[] = parsed.holdings.map((holding) => ({
-    ...holding,
-    kind: holding.kind === 'currency' ? 'cash' : holding.kind,
-  }))
+function migrateCashModel(parsed: LegacyFinanceState): FinanceState {
+  const accounts: Account[] = parsed.accounts.map((account) => ({ ...account, kind: account.kind === 'cash' ? 'cash_container' : account.kind }))
+  const holdings: Holding[] = parsed.holdings.map((holding) => ({ ...holding, kind: holding.kind === 'currency' ? 'cash' : holding.kind }))
+  return { ...parsed, accounts, holdings, expenseCategories: parsed.expenseCategories ?? [], expenseBeneficiaries: parsed.expenseBeneficiaries ?? [], positions: parsed.positions ?? [], capitalCycles: parsed.capitalCycles ?? [] }
+}
 
-  return { ...parsed, accounts, holdings, expenseCategories: parsed.expenseCategories ?? [] }
+export function parseLegacyLocalStorageState(raw: string): FinanceState | null {
+  try {
+    const parsed = JSON.parse(raw) as LegacyFinanceState
+    if (parsed.schemaVersion !== 4 && parsed.schemaVersion !== 5) return null
+    if (!Array.isArray(parsed.parties) || !Array.isArray(parsed.accounts) || !Array.isArray(parsed.holdings) || !Array.isArray(parsed.ledger)) return null
+    return migrateCashModel(parsed)
+  } catch {
+    return null
+  }
 }
 
 export function createLocalStorageFinanceRepository(storage: Storage = window.localStorage): FinanceRepository {
   return {
     load() {
-      try {
-        const raw = storage.getItem(STORAGE_KEY)
-        if (!raw) return null
-        const parsed = JSON.parse(raw) as LegacyFinanceStateV4
-        if (parsed.schemaVersion !== 4) return null
-        const migrated = migrateCashModel(parsed)
-        storage.setItem(STORAGE_KEY, JSON.stringify(migrated))
-        return migrated
-      } catch {
-        return null
-      }
+      const raw = storage.getItem(LEGACY_STORAGE_KEY)
+      return raw ? parseLegacyLocalStorageState(raw) : null
     },
-    save(state) {
-      storage.setItem(STORAGE_KEY, JSON.stringify(state))
-    },
-    clear() {
-      storage.removeItem(STORAGE_KEY)
-    },
+    save(state) { storage.setItem(LEGACY_STORAGE_KEY, JSON.stringify(state)) },
+    clear() { storage.removeItem(LEGACY_STORAGE_KEY) },
   }
 }
