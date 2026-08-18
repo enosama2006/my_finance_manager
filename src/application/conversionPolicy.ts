@@ -36,7 +36,7 @@ export function previewManagedConversion(state: FinanceState, input: ConversionI
     feesSar,
     realizedGainLossSar,
     propagatedTargetBasisSar,
-    exchangeRate: round2(input.targetQuantity / input.sourceQuantity),
+    exchangeRate: input.sourceQuantity / input.targetQuantity,
     realizationState: isCashExit ? 'realized_to_cash' : 'cost_continues',
   }
 }
