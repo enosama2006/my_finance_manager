@@ -7,25 +7,12 @@ import { emptyState } from '../data/emptyState'
 import { createLocalStorageFinanceRepository } from '../data/localStorageRepository'
 import { runScenario, type ScenarioId } from './scenarios'
 import { applyManagedConversion } from './conversionPolicy'
-import {
-  addExistingAsset, addFunds, allocateToPortfolio, createPortfolio, transferFunds,
-  type AddFundsInput, type AllocateToPortfolioInput, type CreatePortfolioInput, type ExistingAssetInput, type TransferFundsInput,
-} from './commands'
-import {
-  archiveAccountGroup, createAccountGroup, createGroupedAccount, moveAccountToGroup, updateAccount, updateAccountGroup,
-  type CreateAccountGroupInput, type CreateGroupedAccountInput, type UpdateAccountGroupInput, type UpdateAccountInput,
-} from './accountGroups'
-import {
-  archiveAssetCorrection, createAsset, flattenLegacyAccountsToAssets, moveAssetToGroup, updateAsset,
-  type CreateAssetInput, type UpdateAssetInput,
-} from './assets'
+import { addExistingAsset, addFunds, allocateToPortfolio, createPortfolio, transferFunds, type AddFundsInput, type AllocateToPortfolioInput, type CreatePortfolioInput, type ExistingAssetInput, type TransferFundsInput } from './commands'
+import { archiveAccountGroup, createAccountGroup, createGroupedAccount, moveAccountToGroup, updateAccount, updateAccountGroup, type CreateAccountGroupInput, type CreateGroupedAccountInput, type UpdateAccountGroupInput, type UpdateAccountInput } from './accountGroups'
+import { archiveAssetCorrection, createAsset, flattenLegacyAccountsToAssets, moveAssetToGroup, updateAsset, type CreateAssetInput, type UpdateAssetInput } from './assets'
+import { addIncomeToAsset, setAssetOpeningBalance, transferBetweenAssets, type AddAssetIncomeInput, type SetAssetOpeningBalanceInput, type TransferBetweenAssetsInput } from './assetTransactions'
 import { applyHoldingMarketQuote, purchaseAssetSimplified, type SimplifiedPurchaseInput } from './purchase'
-import {
-  archiveExpenseBeneficiary, archiveExpenseCategory, createExpenseBeneficiary, createExpenseCategory, createParty, spendExpense,
-  updateExpenseBeneficiary, updateExpenseCategory,
-  type CreateExpenseBeneficiaryInput, type CreateExpenseCategoryInput, type CreatePartyInput, type SpendExpenseInput,
-  type UpdateExpenseBeneficiaryInput, type UpdateExpenseCategoryInput,
-} from './expenses'
+import { archiveExpenseBeneficiary, archiveExpenseCategory, createExpenseBeneficiary, createExpenseCategory, createParty, spendExpense, updateExpenseBeneficiary, updateExpenseCategory, type CreateExpenseBeneficiaryInput, type CreateExpenseCategoryInput, type CreatePartyInput, type SpendExpenseInput, type UpdateExpenseBeneficiaryInput, type UpdateExpenseCategoryInput } from './expenses'
 import { reviseTransaction, type ReviseTransactionInput } from './transactionRevisions'
 import { setOpeningBalance, voidOpeningBalance } from './openingBalances'
 import { correctAssetPurchase, voidAssetPurchase, type CorrectAssetPurchaseInput } from './assetPurchaseCorrections'
@@ -35,28 +22,30 @@ interface FinanceContextValue {
   state: FinanceState
   convert: (input: ConversionInput) => void
 
-  // Canonical schema-v5 API.
   createAsset: (input: CreateAssetInput) => void
   updateAsset: (input: UpdateAssetInput) => void
   moveAssetToGroup: (assetId: string, groupId?: string) => void
   deleteAsset: (assetId: string, reason: string) => void
+  setAssetOpeningBalance: (input: SetAssetOpeningBalanceInput) => void
+  addIncomeToAsset: (input: AddAssetIncomeInput) => void
+  transferBetweenAssets: (input: TransferBetweenAssetsInput) => void
 
   createAccountGroup: (input: CreateAccountGroupInput) => void
   updateAccountGroup: (input: UpdateAccountGroupInput) => void
   archiveAccountGroup: (groupId: string) => void
 
-  // Legacy compatibility API. New UI must not depend on these account calls.
+  // Legacy compatibility only. New UI does not create or organize Accounts.
   addAccount: (input: CreateGroupedAccountInput) => void
   updateAccount: (input: UpdateAccountInput) => void
   moveAccountToGroup: (accountId: string, groupId?: string) => void
-
   addFunds: (input: AddFundsInput) => void
-  voidOpeningBalance: (transactionId: string, reason: string) => void
   addExistingAsset: (input: ExistingAssetInput) => void
+  transferFunds: (input: TransferFundsInput) => void
+
+  voidOpeningBalance: (transactionId: string, reason: string) => void
   purchaseAsset: (input: SimplifiedPurchaseInput) => void
   correctAssetPurchase: (input: CorrectAssetPurchaseInput) => void
   voidAssetPurchase: (transactionId: string, reason: string) => void
-  transferFunds: (input: TransferFundsInput) => void
   createPortfolio: (input: CreatePortfolioInput) => void
   allocateToPortfolio: (input: AllocateToPortfolioInput) => void
   updateHoldingQuote: (holdingId: string, quote: MarketQuote) => void
@@ -96,20 +85,16 @@ function materializeCategoryNecessity(categories: ExpenseCategory[]): ExpenseCat
   return categories.map(resolve)
 }
 
-/** Compatibility migration from the superseded mandatory Place UX. */
 function migrateLegacyPlacesToGroups(state: FinanceState): FinanceState {
   let accountGroups = [...(state.accountGroups ?? [])]
   let accounts = [...state.accounts]
   const selfId = state.parties.find(p => p.type === 'self')?.id
-
   for (const account of accounts) {
     if (account.groupId || account.custodianId === selfId) continue
     const legacy = state.parties.find(p => p.id === account.custodianId && p.type !== 'self' && p.type !== 'person')
     if (!legacy) continue
     const groupId = `legacy-group-${legacy.id}`
-    if (!accountGroups.some(g => g.id === groupId)) {
-      accountGroups.push({ id: groupId, name: legacy.name, status: 'active', description: 'تم تحويله تلقائيًا من طبقة المكان القديمة إلى مجموعة تنظيمية.', createdAt: new Date().toISOString() })
-    }
+    if (!accountGroups.some(g => g.id === groupId)) accountGroups.push({ id: groupId, name: legacy.name, status: 'active', description: 'تم تحويله تلقائيًا من طبقة المكان القديمة إلى مجموعة تنظيمية.', createdAt: new Date().toISOString() })
     accounts = accounts.map(a => a.id === account.id ? { ...a, groupId } : a)
   }
   return { ...state, accountGroups, accounts }
@@ -119,15 +104,7 @@ function normalize(state: FinanceState): FinanceState {
   const withGroups = migrateLegacyPlacesToGroups(state)
   const withInputs = hydrateTransactionUserInputs(withGroups)
   const migrated = flattenLegacyAccountsToAssets(withInputs)
-  return {
-    ...migrated,
-    schemaVersion: 5,
-    accountGroups: migrated.accountGroups ?? [],
-    expenseCategories: materializeCategoryNecessity(migrated.expenseCategories ?? []),
-    expenseBeneficiaries: migrated.expenseBeneficiaries ?? [],
-    positions: migrated.positions ?? [],
-    capitalCycles: migrated.capitalCycles ?? [],
-  }
+  return { ...migrated, schemaVersion: 5, accountGroups: migrated.accountGroups ?? [], expenseCategories: materializeCategoryNecessity(migrated.expenseCategories ?? []), expenseBeneficiaries: migrated.expenseBeneficiaries ?? [], positions: migrated.positions ?? [], capitalCycles: migrated.capitalCycles ?? [] }
 }
 
 function loadInitial(): FinanceState { return normalize(repository.load() ?? emptyState) }
@@ -149,6 +126,9 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
       if (origin && !downstream) persist(voidAssetPurchase(state, origin.id, reason))
       else persist(archiveAssetCorrection(state, assetId, reason))
     },
+    setAssetOpeningBalance: (input) => persist(setAssetOpeningBalance(state, input)),
+    addIncomeToAsset: (input) => persist(addIncomeToAsset(state, input)),
+    transferBetweenAssets: (input) => persist(transferBetweenAssets(state, input)),
 
     createAccountGroup: (input) => persist(createAccountGroup(state, input)),
     updateAccountGroup: (input) => persist(updateAccountGroup(state, input)),
@@ -157,14 +137,14 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     addAccount: (input) => persist(createGroupedAccount(state, input)),
     updateAccount: (input) => persist(updateAccount(state, input)),
     moveAccountToGroup: (accountId, groupId) => persist(moveAccountToGroup(state, accountId, groupId)),
-
     addFunds: (input) => persist(input.classification === 'opening' ? setOpeningBalance(state, input) : addFunds(state, input)),
-    voidOpeningBalance: (transactionId, reason) => persist(voidOpeningBalance(state, transactionId, reason)),
     addExistingAsset: (input) => persist(addExistingAsset(state, input)),
+    transferFunds: (input) => persist(transferFunds(state, input)),
+
+    voidOpeningBalance: (transactionId, reason) => persist(voidOpeningBalance(state, transactionId, reason)),
     purchaseAsset: (input) => persist(purchaseAssetSimplified(state, input)),
     correctAssetPurchase: (input) => persist(correctAssetPurchase(state, input)),
     voidAssetPurchase: (transactionId, reason) => persist(voidAssetPurchase(state, transactionId, reason)),
-    transferFunds: (input) => persist(transferFunds(state, input)),
     createPortfolio: (input) => persist(createPortfolio(state, input)),
     allocateToPortfolio: (input) => persist(allocateToPortfolio(state, input)),
     updateHoldingQuote: (holdingId, quote) => persist(applyHoldingMarketQuote(state, holdingId, quote)),
