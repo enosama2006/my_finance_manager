@@ -24,11 +24,7 @@ export interface Party {
   type: 'person' | 'bank' | 'broker' | 'institution' | 'home' | 'place' | 'self'
 }
 
-/**
- * The only hierarchy/container in the wealth tree. A group has no quantity,
- * balance, ownership, cost basis, valuation or ledger of its own.
- * The historical name AccountGroup is kept for schema compatibility only.
- */
+/** The only hierarchy/container in the wealth tree. */
 export interface AccountGroup {
   id: string
   name: string
@@ -39,11 +35,7 @@ export interface AccountGroup {
 }
 export type WealthGroup = AccountGroup
 
-/**
- * LEGACY schema-v4 entity. New user flows do not create or require Account.
- * Existing accounts are flattened into Assets during normalization so old exports
- * keep working without forcing the user to re-enter data.
- */
+/** LEGACY schema-v4 entity. New user flows do not create or require Account. */
 export interface Account {
   id: string
   name: string
@@ -63,11 +55,7 @@ export interface Account {
 export interface OwnershipShare { id?: string; ownerId: string; quantity: number }
 export interface CostBasisLot { id: string; ownerId: string; quantity: number; unitCostSar?: number; acquiredAt?: string }
 
-/**
- * Canonical financial entity. In the UI this is simply an Asset.
- * It is never a container for another asset; only groups contain assets/groups.
- * accountId/custodianId remain optional legacy provenance fields.
- */
+/** Canonical financial entity. It never contains another Asset; only Groups contain Assets. */
 export interface Holding {
   id: string
   symbol: string
@@ -192,7 +180,26 @@ export interface AssetPurchaseUserInput {
   marketSource?: string
 }
 
-export type TransactionUserInput = AssetPurchaseUserInput
+/** Exact user-entered conversion intent. Needed to reverse/replay portfolio funding correctly. */
+export interface ConversionUserInput {
+  kind: 'conversion'
+  sourceHoldingId: string
+  sourcePortfolioId?: string
+  targetPortfolioId?: string
+  targetSymbol: string
+  targetName: string
+  targetKind: AssetKind
+  targetUnit: string
+  sourceQuantity: number
+  targetQuantity: number
+  targetUnitValueSarAtExecution: number
+  feesSar: number
+  ownerId: string
+  targetGroupId?: string
+  targetLocation?: string
+}
+
+export type TransactionUserInput = AssetPurchaseUserInput | ConversionUserInput
 
 export interface TransactionRevision {
   version: number
