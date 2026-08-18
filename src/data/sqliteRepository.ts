@@ -138,6 +138,8 @@ export function createBrowserSqliteFinanceRepository(
   binaryStore: SqliteBinaryStore = createIndexedDbSqliteBinaryStore(),
   legacyRepository: FinanceRepository = createLocalStorageFinanceRepository(),
 ): FinanceRepository {
+  let writeQueue: Promise<void> = Promise.resolve()
+
   const withDatabase = async <T>(work: (db: Database) => Promise<T> | T): Promise<T> => {
     const SQL = await loadSqlJs()
     const bytes = await binaryStore.load()
@@ -152,8 +154,15 @@ export function createBrowserSqliteFinanceRepository(
     }
   }
 
+  const enqueueWrite = async (work: () => Promise<void>) => {
+    const task = writeQueue.then(work)
+    writeQueue = task.catch(() => undefined)
+    await task
+  }
+
   return {
     async load() {
+      await writeQueue
       try {
         return await withDatabase(async (db) => {
           const sqliteState = readFinanceStateFromSqlite(db)
@@ -172,18 +181,22 @@ export function createBrowserSqliteFinanceRepository(
     },
 
     async save(state) {
-      try {
-        await withDatabase((db) => writeFinanceStateToSqlite(db, state))
-        // Keep a compatibility recovery copy during the SQLite transition. SQLite remains load priority.
-        await legacyRepository.save(state)
-      } catch (error) {
-        console.warn('SQLite save failed; preserving state in legacy recovery storage.', error)
-        await legacyRepository.save(state)
-      }
+      await enqueueWrite(async () => {
+        try {
+          await withDatabase((db) => writeFinanceStateToSqlite(db, state))
+          // Transitional recovery mirror. SQLite is always read first and is the canonical store.
+          await legacyRepository.save(state)
+        } catch (error) {
+          console.warn('SQLite save failed; preserving state in legacy recovery storage.', error)
+          await legacyRepository.save(state)
+        }
+      })
     },
 
     async clear() {
-      await Promise.allSettled([binaryStore.clear(), legacyRepository.clear()])
+      await enqueueWrite(async () => {
+        await Promise.allSettled([binaryStore.clear(), legacyRepository.clear()])
+      })
     },
   }
 }
