@@ -63,11 +63,14 @@ describe('cross-currency cash transfers', () => {
     expect(ownerWeightedAverageCostSar(usd, ownerId)).toBe(3.5)
   })
 
-  it('does not invent historical basis when the source basis is unknown', () => {
+  it('leaves the source-side realized result unknown when source basis is unknown but still re-establishes the base-currency target basis (ADR-009 / RULE-024)', () => {
     const initial = state(cash('usd', 'USD', 100, 3.75), cash('sar', 'SAR', 0, 1))
     const moved = transferBetweenAssets(initial, { sourceAssetId: 'usd', targetAssetId: 'sar', ownerId, quantity: 50, targetQuantity: 187.5 })
+    // Source basis was unknown, so realized P/L cannot be computed and the ledger records that honestly.
     expect(moved.ledger[0].costBasisSar).toBeNull()
-    expect(ownerWeightedAverageCostSar(moved.holdings.find(h => h.id === 'sar')!, ownerId)).toBeNull()
+    expect(moved.ledger[0].realizedGainLossSar).toBeNull()
+    // Target is the base currency: unit basis is 1 by RULE-024 (this is identity, not invention).
+    expect(ownerWeightedAverageCostSar(moved.holdings.find(h => h.id === 'sar')!, ownerId)).toBe(1)
     const restored = voidTransaction(moved, moved.ledger[0].id, 'اختبار basis مجهول')
     expect(ownerWeightedAverageCostSar(restored.holdings.find(h => h.id === 'usd')!, ownerId)).toBeNull()
   })

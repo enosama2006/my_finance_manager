@@ -266,6 +266,19 @@ Foreign-currency opening uses actual known historical basis/rate or unknown. It 
 
 ---
 
+## DEC-027 — Cross-currency cash movement realizes P/L (see ADR-009)
+Status: `Approved / ADR-009 / 2026-08-19`
+
+Same-currency Cash → Cash is a Real Transfer (basis carried, no realized P/L).
+
+Cross-currency Cash → Cash is a Conversion under CALC-015/016: realizes P/L on the source side and re-establishes target basis at market. The base currency (SAR) keeps unit basis 1 by RULE-024, so a `USD → SAR` target Cash Asset receives basis = target SAR quantity × 1.
+
+Supersedes ADR-007 §6 for the cross-currency case only. Everything else in ADR-007 (SQLite ownership, migration, input modes, correction/void of both legs) is unchanged.
+
+Reason: ADR-007 §6 mathematically conflicts with RULE-024/DEC-026 whenever the target is the base currency. RULE-024 is the older, higher-authority rule and settles the direction. Additional benefit: one canonical policy across `transferBetweenAssets` and `applyManagedConversion` collapses INV-003, INV-010, INV-011 and INV-012 into a single fix.
+
+---
+
 # How to add/refine a decision
 
 For a small decision append `DEC-xxx` with status, decision, reason and consequences.

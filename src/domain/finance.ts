@@ -66,8 +66,10 @@ export function availableByOwner(state: FinanceState, ownerId: string): number {
 }
 
 export function realizedProfitByOwner(state: FinanceState, ownerId: string): number {
+  // ADR-008 §7 / ADR-009: one canonical realized-profit truth. Every posted transaction that carries
+  // a realized result contributes, regardless of its kind label — including cross-currency real_transfer.
   return round2(state.ledger
-    .filter((t) => t.ownerId === ownerId && t.status === 'posted' && (t.kind === 'conversion' || t.kind === 'asset_sale'))
+    .filter((t) => t.ownerId === ownerId && t.status === 'posted' && t.realizedGainLossSar != null)
     .reduce((sum, t) => sum + (t.realizedGainLossSar ?? 0), 0))
 }
 
