@@ -21,7 +21,7 @@ export type ExpenseBeneficiaryKind = 'person' | 'group'
 export interface Party {
   id: string
   name: string
-  type: 'person' | 'bank' | 'broker' | 'institution' | 'home' | 'place' | 'self'
+  type: 'person' | 'bank' | 'broker' | 'institution' | 'home' | 'place' | 'self' | 'group'
 }
 
 /** The only hierarchy/container in the wealth tree. */
