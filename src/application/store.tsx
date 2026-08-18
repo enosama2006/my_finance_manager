@@ -15,6 +15,10 @@ import {
   archiveAccountGroup, createAccountGroup, createGroupedAccount, moveAccountToGroup, updateAccount, updateAccountGroup,
   type CreateAccountGroupInput, type CreateGroupedAccountInput, type UpdateAccountGroupInput, type UpdateAccountInput,
 } from './accountGroups'
+import {
+  archiveAssetCorrection, createAsset, flattenLegacyAccountsToAssets, moveAssetToGroup, updateAsset,
+  type CreateAssetInput, type UpdateAssetInput,
+} from './assets'
 import { applyHoldingMarketQuote, purchaseAssetSimplified, type SimplifiedPurchaseInput } from './purchase'
 import {
   archiveExpenseBeneficiary, archiveExpenseCategory, createExpenseBeneficiary, createExpenseCategory, createParty, spendExpense,
@@ -30,12 +34,22 @@ import { hydrateTransactionUserInputs } from './transactionInputMigration'
 interface FinanceContextValue {
   state: FinanceState
   convert: (input: ConversionInput) => void
-  addAccount: (input: CreateGroupedAccountInput) => void
-  updateAccount: (input: UpdateAccountInput) => void
+
+  // Canonical schema-v5 API.
+  createAsset: (input: CreateAssetInput) => void
+  updateAsset: (input: UpdateAssetInput) => void
+  moveAssetToGroup: (assetId: string, groupId?: string) => void
+  deleteAsset: (assetId: string, reason: string) => void
+
   createAccountGroup: (input: CreateAccountGroupInput) => void
   updateAccountGroup: (input: UpdateAccountGroupInput) => void
   archiveAccountGroup: (groupId: string) => void
+
+  // Legacy compatibility API. New UI must not depend on these account calls.
+  addAccount: (input: CreateGroupedAccountInput) => void
+  updateAccount: (input: UpdateAccountInput) => void
   moveAccountToGroup: (accountId: string, groupId?: string) => void
+
   addFunds: (input: AddFundsInput) => void
   voidOpeningBalance: (transactionId: string, reason: string) => void
   addExistingAsset: (input: ExistingAssetInput) => void
@@ -94,7 +108,7 @@ function migrateLegacyPlacesToGroups(state: FinanceState): FinanceState {
     if (!legacy) continue
     const groupId = `legacy-group-${legacy.id}`
     if (!accountGroups.some(g => g.id === groupId)) {
-      accountGroups.push({ id: groupId, name: legacy.name, status: 'active', description: 'تم تحويله تلقائيًا من طبقة المكان القديمة إلى مجموعة حسابات تنظيمية.', createdAt: new Date().toISOString() })
+      accountGroups.push({ id: groupId, name: legacy.name, status: 'active', description: 'تم تحويله تلقائيًا من طبقة المكان القديمة إلى مجموعة تنظيمية.', createdAt: new Date().toISOString() })
     }
     accounts = accounts.map(a => a.id === account.id ? { ...a, groupId } : a)
   }
@@ -102,9 +116,12 @@ function migrateLegacyPlacesToGroups(state: FinanceState): FinanceState {
 }
 
 function normalize(state: FinanceState): FinanceState {
-  const migrated = hydrateTransactionUserInputs(migrateLegacyPlacesToGroups(state))
+  const withGroups = migrateLegacyPlacesToGroups(state)
+  const withInputs = hydrateTransactionUserInputs(withGroups)
+  const migrated = flattenLegacyAccountsToAssets(withInputs)
   return {
     ...migrated,
+    schemaVersion: 5,
     accountGroups: migrated.accountGroups ?? [],
     expenseCategories: materializeCategoryNecessity(migrated.expenseCategories ?? []),
     expenseBeneficiaries: migrated.expenseBeneficiaries ?? [],
@@ -122,12 +139,25 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
   const value = useMemo<FinanceContextValue>(() => ({
     state,
     convert: (input) => persist(applyManagedConversion(state, input)),
-    addAccount: (input) => persist(createGroupedAccount(state, input)),
-    updateAccount: (input) => persist(updateAccount(state, input)),
+
+    createAsset: (input) => persist(createAsset(state, input)),
+    updateAsset: (input) => persist(updateAsset(state, input)),
+    moveAssetToGroup: (assetId, groupId) => persist(moveAssetToGroup(state, assetId, groupId)),
+    deleteAsset: (assetId, reason) => {
+      const origin = state.ledger.find(tx => tx.status === 'posted' && tx.targetHoldingId === assetId && tx.kind === 'asset_purchase')
+      const downstream = state.ledger.some(tx => tx.status === 'posted' && tx.id !== origin?.id && (tx.sourceHoldingId === assetId || tx.targetHoldingId === assetId))
+      if (origin && !downstream) persist(voidAssetPurchase(state, origin.id, reason))
+      else persist(archiveAssetCorrection(state, assetId, reason))
+    },
+
     createAccountGroup: (input) => persist(createAccountGroup(state, input)),
     updateAccountGroup: (input) => persist(updateAccountGroup(state, input)),
     archiveAccountGroup: (groupId) => persist(archiveAccountGroup(state, groupId)),
+
+    addAccount: (input) => persist(createGroupedAccount(state, input)),
+    updateAccount: (input) => persist(updateAccount(state, input)),
     moveAccountToGroup: (accountId, groupId) => persist(moveAccountToGroup(state, accountId, groupId)),
+
     addFunds: (input) => persist(input.classification === 'opening' ? setOpeningBalance(state, input) : addFunds(state, input)),
     voidOpeningBalance: (transactionId, reason) => persist(voidOpeningBalance(state, transactionId, reason)),
     addExistingAsset: (input) => persist(addExistingAsset(state, input)),
