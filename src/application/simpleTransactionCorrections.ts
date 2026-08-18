@@ -37,13 +37,33 @@ export function correctIncome(state: FinanceState, input: CorrectIncomeInput) {
   return preserve(next, current, next.ledger[0], input.reason, validAt(input.at), input.title, input.note)
 }
 
-export interface CorrectTransferInput { transactionId: string; reason: string; at: string; sourceAssetId: string; targetAssetId: string; ownerId: string; quantity: number; title?: string; note?: string }
+export interface CorrectTransferInput {
+  transactionId: string
+  reason: string
+  at: string
+  sourceAssetId: string
+  targetAssetId: string
+  ownerId: string
+  quantity: number
+  targetQuantity?: number
+  exchangeRate?: number
+  title?: string
+  note?: string
+}
 export function correctTransfer(state: FinanceState, input: CorrectTransferInput) {
   const current = state.ledger.find(x => x.id === input.transactionId)
   if (!current || current.kind !== 'real_transfer' || current.status !== 'posted') throw new Error('حركة النقل غير موجودة أو غير نشطة')
   if (!input.reason.trim()) throw new Error('سبب التصحيح مطلوب')
   let next = prepare(state, current, input.reason)
-  next = transferBetweenAssets(next, { sourceAssetId: input.sourceAssetId, targetAssetId: input.targetAssetId, ownerId: input.ownerId, quantity: input.quantity, note: input.note })
+  next = transferBetweenAssets(next, {
+    sourceAssetId: input.sourceAssetId,
+    targetAssetId: input.targetAssetId,
+    ownerId: input.ownerId,
+    quantity: input.quantity,
+    targetQuantity: input.targetQuantity ?? current.targetQuantity,
+    exchangeRate: input.exchangeRate ?? current.exchangeRate,
+    note: input.note,
+  })
   return preserve(next, current, next.ledger[0], input.reason, validAt(input.at), input.title, input.note)
 }
 
