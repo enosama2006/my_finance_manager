@@ -127,7 +127,7 @@ npm run dev:web
 ## Fixtures
 
 - `fixtures/schema-v5-browser-snapshot.redacted.md`: fixture مموّه يحافظ على البنية التي كشفت مشكلة v5 loader، دون نشر بيانات المستخدم المالية الحقيقية.
-- `server/database.test.mjs`: ينشئ ملف SQLite مؤقتًا فعليًا، يختبر migration، الإغلاق وإعادة الفتح، ومنع الاستبدال غير المقصود.
+- `server/database.node-test.mjs`: ينشئ ملف SQLite مؤقتًا فعليًا، يختبر migration، الإغلاق وإعادة الفتح، ومنع الاستبدال غير المقصود.
 
 النسخة الحقيقية الكاملة يجب أن تبقى خارج المستودع العام ما لم يقرر المستخدم صراحة نشرها. يمكن استخدامها محليًا كـGolden Migration Fixture أثناء التطوير.
 
