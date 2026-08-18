@@ -1,63 +1,86 @@
-# SCN-016 — User-correctable asset purchase
+# SCN-016 — User-Correctable Asset Purchase
 
-Status: Implemented / pending CI verification
+Status: **Approved correction direction / Existing-purchase replay implemented for simple cases / Repeated-purchase refinement pending**
 
 ## User reality
-A user can enter a purchase incorrectly: wrong bank/source, wrong owner, wrong target account, amount, quantity, asset identity, date, fees, or physical location. Editing is a correction of recorded reality, not a new economic event.
+A purchase may be entered with the wrong source, owner, amount, Asset identity, quantity, Group placement, fees, date or valuation metadata. Editing is a correction of recorded reality, not a new economic event.
 
 ## Decision
-User-entered purchase data is correctable. A correction uses:
 
-`Reverse old projection → Apply corrected user intent → Keep audit revision`
+```text
+Reverse old purchase projection
+→ Apply corrected user intent
+→ Keep same LogicalTransaction ID
+→ Preserve revision audit
+```
 
-It MUST NOT create a fake transfer merely because the original target account was wrong.
+No fake transfer is created merely because the original source or organization was wrong.
 
-## Model
-- Group = user organization only.
-- Account = real container/where the Holding lives.
-- Holding = asset/value actually held.
-- `LedgerTransaction.userInput` preserves the user-entered purchase intent separately from projected Holding/Ledger fields.
-- Legacy schema-v4 snapshots are hydrated without posting a financial event.
+## Current target model
+- source = Cash Asset;
+- destination mode = `زيادة أصل موجود` OR `إنشاء أصل جديد`;
+- Group is organization for a new/repositioned Asset, not a financial target account;
+- InstrumentDefinition may identify the shared economic instrument;
+- each purchase contributes an independently traceable CostBasisLot.
+
+Legacy `sourceAccountId/targetAccountId` fields may remain only for migration/correction compatibility.
+
+## Destination A — create new Asset
+Use when the user intentionally starts a separate holding/context.
+
+Effects:
+- debit source Cash Asset;
+- create target Asset;
+- create exact purchase lot;
+- establish ownership;
+- optionally allocate to Portfolio/Position.
+
+## Destination B — increase existing Asset
+Use for DCA/repeated buying of the same chosen holding.
+
+Effects:
+- debit source Cash Asset;
+- increase existing Asset quantity/ownership;
+- append a new exact CostBasisLot;
+- keep prior lots untouched;
+- create a new purchase LogicalTransaction;
+- do NOT manufacture a new Asset just because the purchase is new.
+
+Manual instruments are never auto-merged by name/symbol alone. The user explicitly chooses the existing Asset; a future `instrumentId` may provide safe matching suggestions.
 
 ## Correctable purchase fields
-- source cash Holding/account (which bank/account was charged)
-- owner
-- amount paid
-- target Account (where the asset is held)
-- asset type
-- asset name/symbol
-- acquired quantity
-- extra costs/fees
-- current unit valuation entered/captured with the record
-- physical location
-- transaction title/note/date
+Subject to dependency-safe replay:
+- source Cash Asset;
+- owner;
+- amount paid;
+- target existing Asset OR new-Asset intent;
+- target Group for new/repositioned Asset;
+- Instrument/type/identity metadata;
+- quantity;
+- extra costs/fees;
+- date/title/note;
+- valuation metadata captured with the transaction;
+- relevant Portfolio/Position intent when exact reversible projection metadata exists.
 
 ## Void semantics
-Deleting a purchase in UI means audited void:
-1. restore the old source quantity/cost basis;
-2. remove the asset Holding created by the purchase;
-3. remove the open Position created only by that purchase;
-4. retain the transaction as `voided` with revision reason.
+For an untouched purchase or independently reversible purchase lot:
+1. restore source funding exactly;
+2. remove that purchase's quantity/ownership effect;
+3. remove that purchase CostBasisLot;
+4. reverse its Portfolio/Position projection as applicable;
+5. delete/archive target Asset only if no quantity/history remains and it was created solely by that purchase;
+6. keep the LogicalTransaction as voided audit history.
 
-No Ledger row is silently deleted.
+Voiding purchase #2 into an Asset with purchase #1 must not delete purchase #1.
 
 ## Safety boundary
-Direct re-projection is allowed only when the purchased Holding has not subsequently been sold, transferred, split, or ownership-mutated. If later posted transactions reference that Holding, MyFinMan must refuse a local edit and require sequential replay from that point.
+If later sale/transfer/ownership/settlement depends on the affected quantity and deterministic replay is unavailable, refuse local correction and require sequential replay.
 
-Legacy purchases tied to a Portfolio are also refused unless exact source-allocation projection metadata is available; the system must not guess how much funding came from allocated versus free liquidity.
-
-## Legacy migration
-For old asset purchases lacking `userInput`, infer only from existing authoritative references:
-- source account from source Holding
-- target account from target Holding
-- owner/amount/quantity from Ledger
-- asset identity and valuation from target Holding
-
-Currency strings are normalized textually (for example malformed Arabic-diacritic prefixes around `SAR` become `SAR`) without financial effect.
-
-## Acceptance tests
-1. Correct target account: asset moves to corrected Account, source cash final result unchanged, no fake transfer.
-2. Correct source bank/account: old source is restored and corrected source is charged.
-3. Void mistaken purchase: source cash is restored; generated asset disappears; transaction remains as voided audit history.
-4. Legacy transaction intent hydration changes no balances and normalizes malformed currency text.
-5. Any later transaction referencing the purchased Holding blocks direct correction.
+## Acceptance
+1. Correct source Cash Asset restores old source and charges corrected source.
+2. Correct new-Asset Group does not create fake real transfer.
+3. Repeated purchase can increase existing Asset and append one lot.
+4. Void one repeated purchase preserves all unrelated lots/purchases.
+5. Manual same-name Assets are not silently merged.
+6. Legacy purchase hydration changes no balances.
+7. Unsafe dependent chain is refused, not partially rewritten.
