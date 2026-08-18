@@ -1,7 +1,16 @@
 import { holdingUnitValueSar } from './currencies'
 import type { AssetGroup, AssetKind, ConversionInput, CostBasisLot, FinanceState, Holding, LedgerTransaction, Portfolio } from './types'
 
-export const round2 = (value: number) => Math.round((value + Number.EPSILON) * 100) / 100
+/** SAR monetary amount — halalah is the smallest unit. RULE-024, DEC-026. */
+export const roundMoneySar = (value: number) => Math.round((value + Number.EPSILON) * 100) / 100
+/**
+ * Native asset quantity — must preserve user-entered precision. RULE-023, DEC-024.
+ * 12 decimals absorbs float noise from repeated arithmetic while exceeding the natural
+ * precision of every real instrument (BTC 8, fund units 4-6, gold grams 3-4).
+ */
+export const roundQuantity = (value: number) => Math.round((value + Number.EPSILON) * 1e12) / 1e12
+/** Legacy alias kept while call sites are audited and reclassified. */
+export const round2 = roundMoneySar
 
 export function assetGroupOf(kind: AssetKind): AssetGroup {
   if (kind === 'cash') return 'cash_and_equivalents'
@@ -32,13 +41,13 @@ export function netWorthByOwner(state: FinanceState, ownerId: string): number {
 }
 
 export function allocatedQuantity(state: FinanceState, holdingId: string, ownerId: string): number {
-  return round2(state.portfolioSlices.filter((s) => s.holdingId === holdingId && s.ownerId === ownerId).reduce((sum, s) => sum + s.quantity, 0))
+  return roundQuantity(state.portfolioSlices.filter((s) => s.holdingId === holdingId && s.ownerId === ownerId).reduce((sum, s) => sum + s.quantity, 0))
 }
 
 export function availableQuantity(state: FinanceState, holdingId: string, ownerId: string): number {
   const holding = state.holdings.find((h) => h.id === holdingId)
   if (!holding) return 0
-  return round2(Math.max(0, ownerQuantity(holding, ownerId) - allocatedQuantity(state, holdingId, ownerId)))
+  return roundQuantity(Math.max(0, ownerQuantity(holding, ownerId) - allocatedQuantity(state, holdingId, ownerId)))
 }
 
 export function totalAllocatedByOwner(state: FinanceState, ownerId: string): number {
@@ -124,9 +133,9 @@ export function resizeCostBasisLot(lot: CostBasisLot, nextQuantity: number): Cos
 
 function reduceOwnerCostLotsWeightedAverage(lots: CostBasisLot[], ownerId: string, quantity: number): CostBasisLot[] {
   const ownerLots = lots.filter((lot) => lot.ownerId === ownerId)
-  const total = round2(ownerLots.reduce((sum, lot) => sum + lot.quantity, 0))
+  const total = roundQuantity(ownerLots.reduce((sum, lot) => sum + lot.quantity, 0))
   if (quantity > total + 1e-9) throw new Error('Cost-basis lots do not cover owner quantity')
-  const targetRemaining = round2(total - quantity)
+  const targetRemaining = roundQuantity(total - quantity)
   if (targetRemaining <= 0) return lots.filter((lot) => lot.ownerId !== ownerId)
 
   const ownerCount = ownerLots.length
@@ -136,9 +145,9 @@ function reduceOwnerCostLotsWeightedAverage(lots: CostBasisLot[], ownerId: strin
     if (lot.ownerId !== ownerId) return lot
     ownerSeen += 1
     const nextQuantity = ownerSeen === ownerCount
-      ? round2(targetRemaining - assigned)
-      : round2((lot.quantity / total) * targetRemaining)
-    assigned = round2(assigned + nextQuantity)
+      ? roundQuantity(targetRemaining - assigned)
+      : roundQuantity((lot.quantity / total) * targetRemaining)
+    assigned = roundQuantity(assigned + nextQuantity)
     return resizeCostBasisLot(lot, nextQuantity)
   }).filter((lot) => lot.quantity > 0)
 }
@@ -180,8 +189,8 @@ export function applyConversion(state: FinanceState, input: ConversionInput, now
 
   const updatedSource: Holding = {
     ...source,
-    quantity: round2(source.quantity - input.sourceQuantity),
-    ownership: source.ownership.map((share) => share.ownerId === input.ownerId ? { ...share, quantity: round2(share.quantity - input.sourceQuantity) } : share),
+    quantity: roundQuantity(source.quantity - input.sourceQuantity),
+    ownership: source.ownership.map((share) => share.ownerId === input.ownerId ? { ...share, quantity: roundQuantity(share.quantity - input.sourceQuantity) } : share),
     costLots: reduceOwnerCostLotsWeightedAverage(source.costLots, input.ownerId, input.sourceQuantity),
   }
 
@@ -212,8 +221,8 @@ export function applyConversion(state: FinanceState, input: ConversionInput, now
     portfolioSlices = portfolioSlices.map((slice) => {
       if (remaining <= 0 || slice.holdingId !== source.id || slice.ownerId !== input.ownerId || slice.portfolioId !== input.sourcePortfolioId) return slice
       const used = Math.min(slice.quantity, remaining)
-      remaining = round2(remaining - used)
-      return { ...slice, quantity: round2(slice.quantity - used) }
+      remaining = roundQuantity(remaining - used)
+      return { ...slice, quantity: roundQuantity(slice.quantity - used) }
     }).filter((slice) => slice.quantity > 0)
   }
 
@@ -252,13 +261,13 @@ export function updateValuation(state: FinanceState, holdingId: string, unitPric
 }
 
 export function assertPhysicalQuantityInvariant(holding: Holding): boolean {
-  return round2(holding.ownership.reduce((sum, share) => sum + share.quantity, 0)) === round2(holding.quantity)
+  return roundQuantity(holding.ownership.reduce((sum, share) => sum + share.quantity, 0)) === roundQuantity(holding.quantity)
 }
 
 export function assertCostBasisCoverageInvariant(holding: Holding): boolean {
-  return holding.ownership.every((share) => round2(holding.costLots.filter((lot) => lot.ownerId === share.ownerId).reduce((sum, lot) => sum + lot.quantity, 0)) === round2(share.quantity))
+  return holding.ownership.every((share) => roundQuantity(holding.costLots.filter((lot) => lot.ownerId === share.ownerId).reduce((sum, lot) => sum + lot.quantity, 0)) === roundQuantity(share.quantity))
 }
 
 export function assertPortfolioAllocationInvariant(state: FinanceState): boolean {
-  return state.holdings.every((holding) => holding.ownership.every((share) => allocatedQuantity(state, holding.id, share.ownerId) <= round2(share.quantity)))
+  return state.holdings.every((holding) => holding.ownership.every((share) => allocatedQuantity(state, holding.id, share.ownerId) <= roundQuantity(share.quantity)))
 }

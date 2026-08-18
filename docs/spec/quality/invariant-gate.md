@@ -31,8 +31,8 @@ When an invariant fails, the model is wrong — or the rule must be changed deli
 
 | ID | Invariant | Authority | Status | What its failure means |
 |---|---|---|---|---|
-| INV-001 | Native quantity is never rounded to a money scale | RULE-023, DEC-024 | 🔴 RED | `0.00512 BTC` is stored as `0.01 BTC` — wealth overstated by 95% |
-| INV-002 | Every known-basis lot persists an exact total | RULE-023, ADR-005 | 🔴 RED | Existing-asset onboarding stores a rounded unit cost and no exact total |
+| INV-001 | Native quantity is never rounded to a money scale | RULE-023, DEC-024 | 🟢 GREEN | `0.00512 BTC` is stored as `0.01 BTC` — wealth overstated by 95% |
+| INV-002 | Every known-basis lot persists an exact total | RULE-023, ADR-005 | 🟢 GREEN | Existing-asset onboarding stores a rounded unit cost and no exact total |
 | INV-003 | The base currency has a unit cost basis of exactly 1 | RULE-024, DEC-026 | 🔴 RED | SAR acquires a cost basis of 0.933 SAR per SAR after FX |
 | INV-010 | Basis is either carried **or** realized, never both | RULE-011, ADR-007 §6 | 🔴 RED | The same gain is recognized now and again on the next disposal |
 | INV-011 | One realized-profit truth across every lens | ADR-008 Invariant 7 | 🔴 RED | Ledger shows +250; dashboard shows 0 |
@@ -42,7 +42,7 @@ When an invariant fails, the model is wrong — or the rule must be changed deli
 | INV-020 | Owner and Beneficiary are roles over one Party identity | ENT-001, RULE-027 | 🔴 RED | `parties` and `expenseBeneficiaries` are two separate identity stores |
 | INV-021 | Absent custody metadata means the owner holds it | RULE-002, RULE-014 | 🔴 RED | 100% of assets are reported as held by a third party |
 | INV-022 | Net worth includes qualifying claims | CALC-011 | 🔴 RED | Receivables are invisible in net worth |
-| INV-023 | No target flow requires a legacy Account | DEC-021, ADR-004 | 🔴 RED | `addExistingAsset` still throws without an Account row |
+| INV-023 | No target flow requires a legacy Account | DEC-021, ADR-004 | 🟢 GREEN | `addExistingAsset` still throws without an Account row |
 | INV-030 | Stored balances replay exactly from the ledger | ADR-008 §2, Inv. 4/6 | 🟢 GREEN | See §4 — green today, but not yet load-bearing |
 
 ## 4. Honest reading of INV-030
