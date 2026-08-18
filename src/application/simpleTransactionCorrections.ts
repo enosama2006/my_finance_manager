@@ -16,6 +16,42 @@ export function correctOpening(state: FinanceState, input: CorrectOpeningInput) 
   const current = state.ledger.find(x => x.id === input.transactionId)
   if (!current || current.kind !== 'opening' || current.status !== 'posted') throw new Error('الحالة الافتتاحية غير موجودة أو غير نشطة')
   if (!input.reason.trim()) throw new Error('سبب التصحيح مطلوب')
+  const at = validAt(input.at)
+  const sameProjection = current.targetHoldingId === input.assetId && current.ownerId === input.ownerId
+
+  // Opening is a correctable historical fact. If the correction stays on the same
+  // Asset + Owner, do NOT void the old opening and replay later transactions.
+  // setAssetOpeningBalance derives the non-opening movement already embedded in the
+  // current materialized projection, replaces only the opening fact, and adjusts the
+  // projected quantity by the opening delta. Later Ledger transactions stay untouched.
+  if (sameProjection) {
+    const target = state.holdings.find(h => h.id === input.assetId && !h.archived)
+    if (!target) throw new Error('الأصل الهدف غير موجود')
+    let next = setAssetOpeningBalance(state, {
+      assetId: input.assetId,
+      ownerId: input.ownerId,
+      quantity: input.quantity,
+      unitCostSar: target.marketPriceSar,
+      title: input.title,
+      reason: input.reason,
+    })
+    const corrected = next.ledger.find(x => x.id === current.id)
+    if (!corrected) throw new Error('فشل تحديث الحالة الافتتاحية')
+    next = {
+      ...next,
+      ledger: next.ledger.map(tx => tx.id === current.id ? {
+        ...tx,
+        at,
+        title: input.title?.trim() || tx.title,
+        note: input.note?.trim() || tx.note,
+      } : tx),
+    }
+    return next
+  }
+
+  // Moving an opening fact to another Asset/Owner changes two projections. Keep the
+  // existing conservative reverse/replay path until cross-projection dependency replay
+  // is generalized; never fabricate a balancing transaction.
   const conflicting = state.ledger.find(x => x.id !== current.id && x.kind === 'opening' && x.status === 'posted' && x.targetHoldingId === input.assetId && x.ownerId === input.ownerId)
   if (conflicting && input.assetId !== current.targetHoldingId) throw new Error('للأصل الهدف حالة افتتاحية أخرى؛ صححها أو احذفها أولًا')
   let next = prepare(state, current, input.reason)
@@ -24,7 +60,7 @@ export function correctOpening(state: FinanceState, input: CorrectOpeningInput) 
   next = setAssetOpeningBalance(next, { assetId: input.assetId, ownerId: input.ownerId, quantity: input.quantity, unitCostSar: target.marketPriceSar, title: input.title, reason: input.reason })
   const generated = next.ledger.find(x => x.status === 'posted' && x.kind === 'opening' && x.targetHoldingId === input.assetId && x.ownerId === input.ownerId)
   if (!generated) throw new Error('فشل إعادة إنشاء الحالة الافتتاحية')
-  return preserve(next, current, generated, input.reason, validAt(input.at), input.title, input.note)
+  return preserve(next, current, generated, input.reason, at, input.title, input.note)
 }
 
 export interface CorrectIncomeInput { transactionId: string; reason: string; at: string; assetId: string; ownerId: string; quantity: number; title?: string; note?: string }
