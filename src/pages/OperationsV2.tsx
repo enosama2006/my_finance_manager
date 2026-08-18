@@ -8,6 +8,7 @@ import { previewSimplifiedPurchase, type SimplifiedPurchaseInput } from '../appl
 import { GroupAssetCascader } from '../components/GroupAssetCascader'
 import { GroupCascader } from '../components/GroupCascader'
 import { useToast } from '../components/ToastProvider'
+import { useSuccessDialog } from '../components/SuccessDialog'
 import { assetTypeById, assetTypeCatalog, type AssetTypeId } from '../domain/assetCatalog'
 import { currencyCatalog, currencyReferenceRateSar } from '../domain/currencies'
 import { availableQuantity, ownerQuantity, ownerWeightedAverageCostSar } from '../domain/finance'
@@ -42,29 +43,35 @@ const profiles: { value: PortfolioProfile; label: string }[] = [
 ]
 
 export function OperationsV2({ goTrade }: { goTrade: () => void }) {
-  const finance = useFinance(); const toast = useToast(); const { state } = finance
+  const finance = useFinance(); const toast = useToast(); const successDialog = useSuccessDialog(); const { state } = finance
   const owners = state.parties.filter(p => p.type === 'self' || p.type === 'person')
   const groups = (state.accountGroups ?? []).filter(g => g.status === 'active')
   const assets = state.holdings.filter(h => !h.archived)
   const portfolios = state.portfolios.filter(p => p.status === 'active')
   const [action, setAction] = useState<ActionKey>('purchase')
-  const execute = (fn: () => void, success: string) => { try { fn(); toast.success(success); return true } catch (error) { toast.error(err(error)); return false } }
+  // Success = blocking dialog so the user acknowledges before the entry-field reset.
+  // Failure = toast so it doesn't interrupt the flow (they can retry immediately).
+  const execute = async (fn: () => void, success: string): Promise<boolean> => {
+    try { fn() } catch (error) { toast.error(err(error)); return false }
+    await successDialog.show({ message: success })
+    return true
+  }
 
   return <div className="page-stack operations-page">
     <section className="section-intro operations-intro"><div><span className="eyebrow">GROUP → ASSET</span><h2>العمليات المالية</h2><p>المجموعة هي الحاوية التنظيمية الوحيدة. الأصل هو الحقيقة المالية التي تحمل الرصيد/الكمية والمالك والتكلفة والتقييم وتتم عليها الحركات.</p></div><button className="secondary operations-convert" onClick={goTrade}><ArrowLeftRight size={17}/> تحويل / تسييل أصل</button></section>
     <section className="action-picker">{actions.map(item => { const Icon = item.icon; return <button key={item.id} className={action === item.id ? 'action-choice active' : 'action-choice'} onClick={() => setAction(item.id)}><Icon size={18}/><span><strong>{item.title}</strong><small>{item.sub}</small></span></button> })}</section>
     <section className="operation-workspace"><div className="operation-form-panel">
-      {action === 'purchase' && <PurchaseForm state={state} groups={groups} portfolios={portfolios} onSubmit={input => execute(() => finance.purchaseAsset(input), `تم تسجيل شراء «${input.name}».`)}/>} 
-      {action === 'asset' && <AssetForm groups={groups} owners={owners} onSubmit={input => execute(() => finance.createAsset(input), `تم إنشاء الأصل «${input.name}».`)}/>} 
-      {action === 'funds' && <FundsForm state={state} owners={owners} assets={assets} onOpening={input => execute(() => finance.setAssetOpeningBalance(input), 'تم حفظ/تصحيح الرصيد الافتتاحي لنفس الأصل.')} onIncome={input => execute(() => finance.addIncomeToAsset(input), 'تم تسجيل الدخل وإضافته إلى الأصل النقدي.')}/>} 
-      {action === 'transfer' && <TransferForm groups={groups} owners={owners} assets={assets} onSubmit={input => execute(() => finance.transferBetweenAssets(input), 'تم تسجيل نقل الأموال وحفظ كميات المصدر والوجهة وسعر التحويل.')}/>} 
-      {action === 'portfolio' && <PortfolioForm owners={owners} portfolios={portfolios} onSubmit={input => execute(() => finance.createPortfolio(input), 'تم إنشاء المحفظة.')}/>} 
-      {action === 'allocate' && <AllocateForm state={state} owners={owners} assets={assets.filter(h => h.quantity > 0)} portfolios={portfolios} onSubmit={input => execute(() => finance.allocateToPortfolio(input), 'تم التخصيص دون تغيير تموضع الأصل.')}/>} 
+      {action === 'purchase' && <PurchaseForm state={state} groups={groups} portfolios={portfolios} onSubmit={input => execute(() => finance.purchaseAsset(input), `تم تسجيل شراء «${input.name}». مصدر الدفع ووجهة الشراء محفوظان — أدخل الدفعة التالية مباشرة.`)}/>}
+      {action === 'asset' && <AssetForm groups={groups} owners={owners} onSubmit={input => execute(() => finance.createAsset(input), `تم إنشاء الأصل «${input.name}». المجموعة والمالك محفوظان.`)}/>}
+      {action === 'funds' && <FundsForm state={state} owners={owners} assets={assets} onOpening={input => execute(() => finance.setAssetOpeningBalance(input), 'تم حفظ/تصحيح الرصيد الافتتاحي لنفس الأصل. الأصل والمالك محفوظان.')} onIncome={input => execute(() => finance.addIncomeToAsset(input), 'تم تسجيل الدخل وإضافته إلى الأصل النقدي. الأصل والمالك محفوظان.')}/>}
+      {action === 'transfer' && <TransferForm groups={groups} owners={owners} assets={assets} onSubmit={input => execute(() => finance.transferBetweenAssets(input), 'تم تسجيل نقل الأموال. المصدر والوجهة محفوظان — أدخل الحوالة التالية مباشرة.')}/>}
+      {action === 'portfolio' && <PortfolioForm owners={owners} portfolios={portfolios} onSubmit={input => execute(() => finance.createPortfolio(input), 'تم إنشاء المحفظة.')}/>}
+      {action === 'allocate' && <AllocateForm state={state} owners={owners} assets={assets.filter(h => h.quantity > 0)} portfolios={portfolios} onSubmit={input => execute(() => finance.allocateToPortfolio(input), 'تم التخصيص. المالك والأصل والمحفظة محفوظون.')}/>}
     </div><aside className="operation-help"><CirclePlus size={20}/><strong>القاعدة</strong><p>{helpFor(action)}</p><div className="operation-rule"><span>إعادة تسمية الأصل أو نقله بين المجموعات تنظيم فقط. تغيير الكمية أو المالك أو حركة سابقة هو تصحيح مالي يُحفظ أثره.</span></div></aside></section>
   </div>
 }
 
-function PurchaseForm({ state, groups, portfolios, onSubmit }: { state: FinanceState; groups: FinanceState['accountGroups']; portfolios: Portfolio[]; onSubmit: (input: SimplifiedPurchaseInput) => boolean }) {
+function PurchaseForm({ state, groups, portfolios, onSubmit }: { state: FinanceState; groups: FinanceState['accountGroups']; portfolios: Portfolio[]; onSubmit: (input: SimplifiedPurchaseInput) => Promise<boolean> }) {
   const cashAssets = state.holdings.filter(h => !h.archived && h.kind === 'cash' && ownerQuantity(h, SELF_ID) > 0)
   const [sourceHoldingId, setSource] = useState('')
   const [amountPaid, setAmount] = useState('')
@@ -137,12 +144,14 @@ function PurchaseForm({ state, groups, portfolios, onSubmit }: { state: FinanceS
   try { preview = previewSimplifiedPurchase(state, input) } catch { preview = null }
   if (targetMode === 'existing' && !selectedTarget) preview = null
 
-  const reset = () => {
-    const initial = assetTypeById('gold')!
-    setSource(''); setAmount(''); setTargetMode('new'); setTargetAsset(''); setTargetGroup('')
-    setAssetType('gold'); setName(initial.label); setSymbol(initial.defaultSymbol ?? '')
-    setQuantity(''); setPortfolio(''); setLocation(''); setExtraCosts('0')
-    setQuote(null); setQuoteState('idle'); setResetKey(key => key + 1)
+  // Reset only the fields specific to a single purchase entry. Preserve source of payment,
+  // purchase destination (new group / existing asset), asset type, and target portfolio so the
+  // user can enter the next lot immediately without re-selecting them.
+  const resetEntryFields = () => {
+    setAmount('')
+    setQuantity('')
+    setExtraCosts('0')
+    if (targetMode === 'new') setLocation('')
   }
 
   const submit = async (e: FormEvent) => {
@@ -154,8 +163,8 @@ function PurchaseForm({ state, groups, portfolios, onSubmit }: { state: FinanceS
       if (!finalQuote && effectiveSymbol.trim() && !['none','manual_appraisal','contractual'].includes(definition.quoteStrategy)) {
         finalQuote = await fetchMarketQuote({ assetTypeId, symbol: effectiveSymbol, quoteStrategy: definition.quoteStrategy })
       }
-      const success = onSubmit({ ...input, marketQuote: finalQuote })
-      if (success) reset()
+      const success = await onSubmit({ ...input, marketQuote: finalQuote })
+      if (success) resetEntryFields()
     } finally {
       setSubmitting(false)
     }
@@ -183,14 +192,43 @@ function PurchaseForm({ state, groups, portfolios, onSubmit }: { state: FinanceS
   </form></FormShell>
 }
 
-function AssetForm({ groups, owners, onSubmit }: { groups: FinanceState['accountGroups']; owners: Party[]; onSubmit: (input: CreateAssetInput) => void }) {
+function AssetForm({ groups, owners, onSubmit }: { groups: FinanceState['accountGroups']; owners: Party[]; onSubmit: (input: CreateAssetInput) => Promise<boolean> }) {
   const [assetType,setAssetType]=useState<NewAssetType>('cash')
   const cash=assetType==='cash'; const def=cash?undefined:assetTypeById(assetType)!
   const [groupId,setGroup]=useState(''); const [ownerId,setOwner]=useState(owners.find(o=>o.id===SELF_ID)?.id??owners[0]?.id??'')
   const [name,setName]=useState(''); const [currency,setCurrency]=useState('SAR'); const [accountKind,setAccountKind]=useState<AccountKind>('checking'); const [last4,setLast4]=useState(''); const [institution,setInstitution]=useState('')
   const [symbol,setSymbol]=useState(''); const [quantity,setQuantity]=useState('0'); const [cost,setCost]=useState(''); const [current,setCurrent]=useState(''); const [description,setDescription]=useState('')
   useEffect(()=>{if(!cash&&def){setSymbol(def.defaultSymbol??'');if(!name.trim())setName(def.label)}},[assetType])
-  const submit=(e:FormEvent)=>{e.preventDefault();const kind=cash?'cash' as const:def!.kind;const sym=cash?currency:(symbol||def!.defaultSymbol||name.slice(0,5));const q=Math.max(0,num(quantity||'0'));const market=cash?(currencyReferenceRateSar(currency)??(current?num(current):1)):(current?num(current):cost&&q>0?num(cost)/q:1);onSubmit({name:name||(cash?`أصل ${currency}`:def!.label),kind,assetTypeId:cash?undefined:def!.id,symbol:sym,nativeUnit:cash?currency:def!.defaultUnit,ownerId,quantity:q,costBasisSar:cost?num(cost):undefined,marketPriceSar:market,groupId:groupId||undefined,accountKind:cash?accountKind:undefined,currency:cash?currency:undefined,last4:cash?last4||undefined:undefined,institutionName:cash?institution||undefined:undefined,description:description||undefined,performanceRole:cash?'transactional_cash':def!.defaultPerformanceRole});setName('');setQuantity('0');setCost('');setCurrent('');setDescription('')}
+  // Preserve groupId, ownerId, assetType, currency, accountKind, institution — the "where/who/kind"
+  // context that stays the same when adding multiple assets in the same group.
+  const submit = async (e: FormEvent) => {
+    e.preventDefault()
+    const kind = cash ? 'cash' as const : def!.kind
+    const sym = cash ? currency : (symbol || def!.defaultSymbol || name.slice(0, 5))
+    const q = Math.max(0, num(quantity || '0'))
+    const market = cash
+      ? (currencyReferenceRateSar(currency) ?? (current ? num(current) : 1))
+      : (current ? num(current) : cost && q > 0 ? num(cost) / q : 1)
+    const success = await onSubmit({
+      name: name || (cash ? `أصل ${currency}` : def!.label),
+      kind,
+      assetTypeId: cash ? undefined : def!.id,
+      symbol: sym,
+      nativeUnit: cash ? currency : def!.defaultUnit,
+      ownerId,
+      quantity: q,
+      costBasisSar: cost ? num(cost) : undefined,
+      marketPriceSar: market,
+      groupId: groupId || undefined,
+      accountKind: cash ? accountKind : undefined,
+      currency: cash ? currency : undefined,
+      last4: cash ? last4 || undefined : undefined,
+      institutionName: cash ? institution || undefined : undefined,
+      description: description || undefined,
+      performanceRole: cash ? 'transactional_cash' : def!.defaultPerformanceRole,
+    })
+    if (success) { setName(''); setQuantity('0'); setCost(''); setCurrent(''); setDescription(''); setLast4('') }
+  }
   return <FormShell title="إضافة أصل موجود" subtitle="أدخل فقط البيانات التي تعرّف الأصل وقيمته. التفاصيل النادرة لا تشغل نموذج الإدخال الأساسي."><form className="trade-form" onSubmit={submit}>
     <Field label="نوع الأصل"><select value={assetType} onChange={e=>setAssetType(e.target.value as NewAssetType)}><option value="cash">النقد والعملات — أصل نقدي / مصرفي</option>{assetTypeCatalog.map(x=><option key={x.id} value={x.id}>{x.groupLabel} — {x.label}</option>)}</select></Field>
     <GroupCascader groups={groups??[]} value={groupId} onChange={setGroup} label="المجموعة"/>
@@ -202,15 +240,23 @@ function AssetForm({ groups, owners, onSubmit }: { groups: FinanceState['account
   </form></FormShell>
 }
 
-function FundsForm({ state, owners, assets, onOpening, onIncome }: { state: FinanceState; owners: Party[]; assets: Holding[]; onOpening: (i: SetAssetOpeningBalanceInput) => void; onIncome: (i: AddAssetIncomeInput) => void }) {
+function FundsForm({ owners, assets, onOpening, onIncome }: { state: FinanceState; owners: Party[]; assets: Holding[]; onOpening: (i: SetAssetOpeningBalanceInput) => Promise<boolean>; onIncome: (i: AddAssetIncomeInput) => Promise<boolean> }) {
   const cash = assets.filter(a => a.kind === 'cash'); const [assetId, setAsset] = useState(''); const [ownerId, setOwner] = useState(owners.find(o => o.id === SELF_ID)?.id ?? owners[0]?.id ?? ''); const [quantity, setQuantity] = useState(''); const [kind, setKind] = useState<'opening'|'income'>('opening'); const [title, setTitle] = useState('')
   const asset = cash.find(a => a.id === assetId)
-  const submit = (e: FormEvent) => { e.preventDefault(); const q = num(quantity); if (kind === 'opening') onOpening({ assetId, ownerId, quantity: q, unitCostSar: asset?.marketPriceSar, title: title || undefined }); else onIncome({ assetId, ownerId, quantity: q, title: title || undefined }); setQuantity(''); setTitle('') }
+  // Preserve assetId, ownerId, kind; reset only quantity + title so successive incomes on the same asset are one keystroke each.
+  const submit = async (e: FormEvent) => {
+    e.preventDefault()
+    const q = num(quantity)
+    const success = kind === 'opening'
+      ? await onOpening({ assetId, ownerId, quantity: q, unitCostSar: asset?.marketPriceSar, title: title || undefined })
+      : await onIncome({ assetId, ownerId, quantity: q, title: title || undefined })
+    if (success) { setQuantity(''); setTitle('') }
+  }
   if (!cash.length) return <EmptyAction title="لا توجد أصول نقدية" text="أنشئ أصلًا نقديًا أولًا."/>
   return <FormShell title="إضافة أموال" subtitle="اختر الأصل النقدي مباشرة. الرصيد الافتتاحي واحد ويُصحح بدل تكراره."><form className="trade-form" onSubmit={submit}><Field label="الأصل النقدي"><select value={assetId} onChange={e => setAsset(e.target.value)}><option value="">اختر الأصل</option>{cash.map(a => <option key={a.id} value={a.id}>{a.name} — {a.symbol}</option>)}</select></Field><div className="field-grid"><Field label="المالك"><select value={ownerId} onChange={e => setOwner(e.target.value)}>{owners.map(o => <option key={o.id} value={o.id}>{o.name}</option>)}</select></Field><Field label="النوع"><select value={kind} onChange={e => setKind(e.target.value as 'opening'|'income')}><option value="opening">رصيد افتتاحي / تصحيح</option><option value="income">دخل جديد</option></select></Field></div><Field label={`المبلغ ${asset ? `(${asset.nativeUnit})` : ''}`}><input value={quantity} onChange={e => setQuantity(e.target.value)} inputMode="decimal"/></Field><Field label="العنوان (اختياري)"><input value={title} onChange={e => setTitle(e.target.value)}/></Field><button className="primary wide" disabled={!assetId} type="submit">{kind === 'opening' ? 'حفظ الرصيد الافتتاحي' : 'إضافة الدخل'}</button></form></FormShell>
 }
 
-function TransferForm({ groups, owners, assets, onSubmit }: { groups: FinanceState['accountGroups']; owners: Party[]; assets: Holding[]; onSubmit: (i: TransferBetweenAssetsInput) => boolean }) {
+function TransferForm({ groups, owners, assets, onSubmit }: { groups: FinanceState['accountGroups']; owners: Party[]; assets: Holding[]; onSubmit: (i: TransferBetweenAssetsInput) => Promise<boolean> }) {
   const cash = assets.filter(a => a.kind === 'cash')
   const [ownerId, setOwner] = useState(owners.find(o => o.id === SELF_ID)?.id ?? owners[0]?.id ?? '')
   const [source, setSource] = useState('')
@@ -241,11 +287,13 @@ function TransferForm({ groups, owners, assets, onSubmit }: { groups: FinanceSta
     setExchangeRate('')
   }, [target, fxEntryMode])
 
-  const reset = () => {
-    setSource(''); setTarget(''); setQuantity(''); setTargetAmount(''); setExchangeRate(''); setFxEntryMode('target_amount'); setResetKey(k => k + 1)
+  // Preserve source/target/owner/fx-mode so back-to-back transfers between the same accounts
+  // don't require re-selecting the tree; reset only the per-entry amounts.
+  const resetEntryFields = () => {
+    setQuantity(''); setTargetAmount(''); setExchangeRate('')
   }
 
-  const submit = (e: FormEvent) => {
+  const submit = async (e: FormEvent) => {
     e.preventDefault()
     const input: TransferBetweenAssetsInput = {
       sourceAssetId: source,
@@ -255,14 +303,14 @@ function TransferForm({ groups, owners, assets, onSubmit }: { groups: FinanceSta
       targetQuantity: differentCurrency && fxEntryMode === 'target_amount' ? enteredTarget : undefined,
       exchangeRate: differentCurrency && fxEntryMode === 'exchange_rate' ? enteredRate : undefined,
     }
-    if (onSubmit(input)) reset()
+    if (await onSubmit(input)) resetEntryFields()
   }
 
   const sourceEligible = (asset: Holding) => asset.kind === 'cash' && ownerQuantity(asset, ownerId) > 0
   const targetEligible = (asset: Holding) => asset.kind === 'cash' && asset.id !== source
 
   return <FormShell title="نقل أموال" subtitle="انقل بين حسابات نقدية بأي عملة. عند اختلاف العملة أدخل المبلغ النهائي أو سعر التحويل، وسيشتق النظام الآخر ويحفظ الاثنين."><form className="trade-form" onSubmit={submit}>
-    <Field label="المالك"><select value={ownerId} onChange={e => { setOwner(e.target.value); reset() }}>{owners.map(o => <option key={o.id} value={o.id}>{o.name}</option>)}</select></Field>
+    <Field label="المالك"><select value={ownerId} onChange={e => { setOwner(e.target.value); setSource(''); setTarget(''); resetEntryFields() }}>{owners.map(o => <option key={o.id} value={o.id}>{o.name}</option>)}</select></Field>
     <GroupAssetCascader key={`transfer-source-${ownerId}-${resetKey}`} groups={groups ?? []} assets={cash} value={source} onChange={setSource} isEligible={sourceEligible} label="من حساب / أصل نقدي" placeholder="اختر المصدر من الشجرة"/>
     <GroupAssetCascader key={`transfer-target-${source}-${resetKey}`} groups={groups ?? []} assets={cash} value={target} onChange={setTarget} isEligible={targetEligible} label="إلى حساب / أصل نقدي" placeholder="اختر الوجهة من الشجرة"/>
     <Field label={`المبلغ المخصوم من المصدر${sourceAsset ? ` (${sourceAsset.symbol})` : ''}`}><input value={quantity} onChange={e => setQuantity(e.target.value)} inputMode="decimal"/></Field>
@@ -283,15 +331,26 @@ function TransferForm({ groups, owners, assets, onSubmit }: { groups: FinanceSta
   </form></FormShell>
 }
 
-function PortfolioForm({ owners, portfolios, onSubmit }: { owners: Party[]; portfolios: Portfolio[]; onSubmit: (input: CreatePortfolioInput) => void }) {
+function PortfolioForm({ owners, portfolios, onSubmit }: { owners: Party[]; portfolios: Portfolio[]; onSubmit: (input: CreatePortfolioInput) => Promise<boolean> }) {
   const [ownerId, setOwner] = useState(owners.find(o => o.id === SELF_ID)?.id ?? owners[0]?.id ?? ''); const [name, setName] = useState(''); const [profile, setProfile] = useState<PortfolioProfile>('investment'); const [parentId, setParent] = useState(''); const [purpose, setPurpose] = useState(''); const [target, setTarget] = useState('')
-  const submit = (e: FormEvent) => { e.preventDefault(); onSubmit({ name, ownerId, parentId: parentId || undefined, profile, purpose: purpose || undefined, targetValueSar: target ? num(target) : undefined, protectionMode: 'flexible' }); setName('') }
+  // Preserve owner/profile/parent so a batch of related portfolios is fast to enter.
+  const submit = async (e: FormEvent) => {
+    e.preventDefault()
+    const success = await onSubmit({ name, ownerId, parentId: parentId || undefined, profile, purpose: purpose || undefined, targetValueSar: target ? num(target) : undefined, protectionMode: 'flexible' })
+    if (success) { setName(''); setPurpose(''); setTarget('') }
+  }
   return <FormShell title="إنشاء محفظة" subtitle="المحفظة تجيب «لماذا؟» ولا تحتوي الأصل تنظيميًا."><form className="trade-form" onSubmit={submit}><div className="field-grid"><Field label="اسم المحفظة"><input value={name} onChange={e=>setName(e.target.value)}/></Field><Field label="المالك"><select value={ownerId} onChange={e=>setOwner(e.target.value)}>{owners.map(o=><option key={o.id} value={o.id}>{o.name}</option>)}</select></Field></div><div className="field-grid"><Field label="السلوك"><select value={profile} onChange={e=>setProfile(e.target.value as PortfolioProfile)}>{profiles.map(x=><option key={x.value} value={x.value}>{x.label}</option>)}</select></Field><Field label="محفظة أم"><select value={parentId} onChange={e=>setParent(e.target.value)}><option value="">جذرية</option>{portfolios.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}</select></Field></div><Field label="الغرض"><input value={purpose} onChange={e=>setPurpose(e.target.value)}/></Field><Field label="الهدف بالريال"><input value={target} onChange={e=>setTarget(e.target.value)} inputMode="decimal"/></Field><button className="primary wide" type="submit">إنشاء المحفظة</button></form></FormShell>
 }
 
-function AllocateForm({ state, owners, assets, portfolios, onSubmit }: { state: FinanceState; owners: Party[]; assets: Holding[]; portfolios: Portfolio[]; onSubmit: (input: AllocateToPortfolioInput) => void }) {
+function AllocateForm({ state, owners, assets, portfolios, onSubmit }: { state: FinanceState; owners: Party[]; assets: Holding[]; portfolios: Portfolio[]; onSubmit: (input: AllocateToPortfolioInput) => Promise<boolean> }) {
   const [ownerId,setOwner]=useState(owners.find(o=>o.id===SELF_ID)?.id??owners[0]?.id??''); const eligible=useMemo(()=>assets.filter(h=>ownerQuantity(h,ownerId)>0),[assets,ownerId]); const [holdingId,setHolding]=useState(''); const [portfolioId,setPortfolio]=useState(portfolios[0]?.id??''); const [quantity,setQuantity]=useState(''); const holding=eligible.find(h=>h.id===holdingId); const free=holding?availableQuantity(state,holding.id,ownerId):0
-  return <FormShell title="تخصيص لمحفظة" subtitle="التخصيص لا ينقل الأصل من مجموعته."><form className="trade-form" onSubmit={e=>{e.preventDefault();onSubmit({holdingId,ownerId,portfolioId,quantity:num(quantity)})}}><Field label="المالك"><select value={ownerId} onChange={e=>{setOwner(e.target.value);setHolding('')}}>{owners.map(o=><option key={o.id} value={o.id}>{o.name}</option>)}</select></Field><Field label="الأصل"><select value={holdingId} onChange={e=>setHolding(e.target.value)}><option value="">اختر الأصل</option>{eligible.map(h=><option key={h.id} value={h.id}>{h.name} — حر {availableQuantity(state,h.id,ownerId).toLocaleString('ar-SA')} {h.nativeUnit}</option>)}</select></Field><div className="field-grid"><Field label="الكمية"><input value={quantity} onChange={e=>setQuantity(e.target.value)} inputMode="decimal"/><small>المتاح: {free.toLocaleString('ar-SA')} {holding?.nativeUnit}</small></Field><Field label="المحفظة"><select value={portfolioId} onChange={e=>setPortfolio(e.target.value)}>{portfolios.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}</select></Field></div><button className="primary wide" type="submit">تخصيص</button></form></FormShell>
+  // Preserve owner/asset/portfolio; reset only quantity.
+  const submit = async (e: FormEvent) => {
+    e.preventDefault()
+    const success = await onSubmit({ holdingId, ownerId, portfolioId, quantity: num(quantity) })
+    if (success) setQuantity('')
+  }
+  return <FormShell title="تخصيص لمحفظة" subtitle="التخصيص لا ينقل الأصل من مجموعته."><form className="trade-form" onSubmit={submit}><Field label="المالك"><select value={ownerId} onChange={e=>{setOwner(e.target.value);setHolding('')}}>{owners.map(o=><option key={o.id} value={o.id}>{o.name}</option>)}</select></Field><Field label="الأصل"><select value={holdingId} onChange={e=>setHolding(e.target.value)}><option value="">اختر الأصل</option>{eligible.map(h=><option key={h.id} value={h.id}>{h.name} — حر {availableQuantity(state,h.id,ownerId).toLocaleString('ar-SA')} {h.nativeUnit}</option>)}</select></Field><div className="field-grid"><Field label="الكمية"><input value={quantity} onChange={e=>setQuantity(e.target.value)} inputMode="decimal"/><small>المتاح: {free.toLocaleString('ar-SA')} {holding?.nativeUnit}</small></Field><Field label="المحفظة"><select value={portfolioId} onChange={e=>setPortfolio(e.target.value)}>{portfolios.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}</select></Field></div><button className="primary wide" type="submit">تخصيص</button></form></FormShell>
 }
 
 function FormShell({ title, subtitle, children }: { title: string; subtitle: string; children: ReactNode }) { return <div className="panel operation-form"><div className="panel-head"><div><span>تنفيذ على بياناتك</span><h2>{title}</h2><span>{subtitle}</span></div></div>{children}</div> }
