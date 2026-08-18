@@ -4,7 +4,8 @@ import type { MarketQuote } from '../data/marketData'
 import { parseSnapshot } from '../data/snapshot'
 import { seedState } from '../data/seed'
 import { emptyState } from '../data/emptyState'
-import { createBrowserSqliteFinanceRepository } from '../data/sqliteRepository'
+import { createLocalStorageFinanceRepository } from '../data/localStorageRepository'
+import { createServerSqliteFinanceRepository, type ServerStorageStatus } from '../data/serverSqliteRepository'
 import { runScenario, type ScenarioId } from './scenarios'
 import { applyManagedConversion } from './conversionPolicy'
 import { addExistingAsset, addFunds, allocateToPortfolio, createPortfolio, transferFunds, type AddFundsInput, type AllocateToPortfolioInput, type CreatePortfolioInput, type ExistingAssetInput, type TransferFundsInput } from './commands'
@@ -22,8 +23,19 @@ import { correctAllocation, correctConversion, correctExpense, correctIncome, co
 import { hydrateTransactionUserInputs } from './transactionInputMigration'
 import { voidTransaction } from './transactionVoids'
 
+export type StorageMode = 'server_sqlite' | 'legacy_browser' | 'server_unavailable'
+export interface FinanceStorageRuntime {
+  mode: StorageMode
+  serverOnline: boolean
+  databaseFile?: string
+  migrationAvailable: boolean
+}
+
 interface FinanceContextValue {
   state: FinanceState
+  storage: FinanceStorageRuntime
+  migrateToSqlite: () => Promise<void>
+  createExportCheckpoint: (id: string, exportedAt: string) => Promise<void>
   convert: (input: ConversionInput) => void
   createAsset: (input: CreateAssetInput) => void
   updateAsset: (input: UpdateAssetFullInput) => void
@@ -73,7 +85,8 @@ interface FinanceContextValue {
 }
 
 const FinanceContext = createContext<FinanceContextValue | null>(null)
-const repository = createBrowserSqliteFinanceRepository()
+const serverRepository = createServerSqliteFinanceRepository()
+const legacyRepository = createLocalStorageFinanceRepository()
 
 function materializeCategoryNecessity(categories: ExpenseCategory[]): ExpenseCategory[] {
   const byId = new Map(categories.map(c => [c.id, c]))
@@ -115,19 +128,51 @@ function normalize(state: FinanceState): FinanceState {
   return { ...migrated, schemaVersion: 5, accountGroups: migrated.accountGroups ?? [], expenseCategories: materializeCategoryNecessity(migrated.expenseCategories ?? []), expenseBeneficiaries: migrated.expenseBeneficiaries ?? [], positions: migrated.positions ?? [], capitalCycles: migrated.capitalCycles ?? [] }
 }
 
+function runtimeFromStatus(status: ServerStorageStatus, mode: StorageMode, migrationAvailable: boolean): FinanceStorageRuntime {
+  return { mode, serverOnline: status.online, databaseFile: status.databaseFile, migrationAvailable }
+}
+
 export function FinanceProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<FinanceState>(emptyState)
   const [ready, setReady] = useState(false)
+  const [storage, setStorage] = useState<FinanceStorageRuntime>({ mode: 'server_unavailable', serverOnline: false, migrationAvailable: false })
 
   useEffect(() => {
     let active = true
     void (async () => {
-      const loaded = await repository.load()
+      const status = await serverRepository.status()
       if (!active) return
-      const normalized = normalize(loaded ?? emptyState)
+
+      if (status.online && status.hasState) {
+        const loaded = await serverRepository.load()
+        if (!active) return
+        setState(normalize(loaded ?? emptyState))
+        setStorage(runtimeFromStatus(status, 'server_sqlite', false))
+        setReady(true)
+        return
+      }
+
+      const legacy = await legacyRepository.load()
+      if (!active) return
+      if (status.online && legacy) {
+        setState(normalize(legacy))
+        setStorage(runtimeFromStatus(status, 'legacy_browser', true))
+        setReady(true)
+        return
+      }
+
+      const normalized = normalize(legacy ?? emptyState)
       setState(normalized)
+      if (status.online) {
+        await serverRepository.save(normalized)
+        const nextStatus = await serverRepository.status()
+        if (!active) return
+        setStorage(runtimeFromStatus(nextStatus, 'server_sqlite', false))
+      } else {
+        setStorage(runtimeFromStatus(status, 'server_unavailable', false))
+        await legacyRepository.save(normalized)
+      }
       setReady(true)
-      await repository.save(normalized)
     })()
     return () => { active = false }
   }, [])
@@ -135,11 +180,29 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
   const persist = (next: FinanceState) => {
     const normalized = normalize(next)
     setState(normalized)
-    void repository.save(normalized)
+    if (storage.mode === 'server_sqlite') void serverRepository.save(normalized)
+    else void legacyRepository.save(normalized)
+  }
+
+  const migrateToSqlite = async () => {
+    const status = await serverRepository.status()
+    if (!status.online) throw new Error('خادم MyFinMan SQLite غير متصل. شغّل التطبيق عبر npm run dev ثم أعد المحاولة.')
+    if (status.hasState) throw new Error('قاعدة SQLite تحتوي بيانات بالفعل؛ لن يتم استبدالها تلقائيًا.')
+    const normalized = normalize(state)
+    const migratedStatus = await serverRepository.migrate(normalized)
+    setStorage(runtimeFromStatus(migratedStatus, 'server_sqlite', false))
+  }
+
+  const createExportCheckpoint = async (id: string, exportedAt: string) => {
+    if (storage.mode !== 'server_sqlite') return
+    await serverRepository.checkpoint(id, normalize(state), exportedAt)
   }
 
   const value = useMemo<FinanceContextValue>(() => ({
     state,
+    storage,
+    migrateToSqlite,
+    createExportCheckpoint,
     convert: input => persist(applyManagedConversion(state, input)),
     createAsset: input => persist(createAssetWithOpening(state, input)),
     updateAsset: input => persist(updateAssetFull(state, input)),
@@ -196,11 +259,11 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     reviseTransaction: input => persist(reviseTransaction(state, input)),
     importSnapshot: raw => persist(parseSnapshot(raw)),
     runScenario: id => persist(runScenario(state, id)),
-    loadDemo: () => { void repository.clear().then(() => persist(seedState)) },
-    reset: () => { void repository.clear().then(() => persist(emptyState)) },
-  }), [state])
+    loadDemo: () => persist(seedState),
+    reset: () => persist(emptyState),
+  }), [state, storage])
 
-  if (!ready) return <div className="app-stage"><div className="app-shell"><main className="main-area"><div className="content"><div className="panel empty-preview"><strong>جاري فتح قاعدة MyFinMan…</strong><span>تحميل SQLite وترحيل بيانات المتصفح القديمة إن وجدت.</span></div></div></main></div></div>
+  if (!ready) return <div className="app-stage"><div className="app-shell"><main className="main-area"><div className="content"><div className="panel empty-preview"><strong>جاري فتح MyFinMan…</strong><span>التحقق من قاعدة SQLite المحلية وبيانات الترحيل السابقة.</span></div></div></main></div></div>
   return <FinanceContext.Provider value={value}>{children}</FinanceContext.Provider>
 }
 
