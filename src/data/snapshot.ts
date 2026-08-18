@@ -16,6 +16,12 @@ export interface MigrationSnapshotManifest {
   storageEngine: 'sqlite'
 }
 
+export interface DownloadedSnapshotMeta {
+  checkpointId: string
+  exportedAt: string
+  filename: string
+}
+
 export function createSnapshot(state: FinanceState, exportedAt = new Date().toISOString()): MyFinManSnapshot {
   return { format: 'myfinman-snapshot', version: 1, exportedAt, schemaVersion: state.schemaVersion, state }
 }
@@ -69,16 +75,20 @@ export function parseSnapshot(raw: string): FinanceState {
   return state
 }
 
-export function downloadSnapshot(state: FinanceState) {
-  const markdown = createMigrationMarkdown(state)
+export function downloadSnapshot(state: FinanceState): DownloadedSnapshotMeta {
+  const exportedAt = new Date().toISOString()
+  const checkpointId = `export-${exportedAt}`
+  const markdown = createMigrationMarkdown(state, exportedAt)
   const blob = new Blob([markdown], { type: 'text/markdown;charset=utf-8' })
   const url = URL.createObjectURL(blob)
   const anchor = document.createElement('a')
-  const stamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)
+  const stamp = exportedAt.replace(/[:.]/g, '-').slice(0, 19)
+  const filename = `myfinman-migration-${stamp}.md`
   anchor.href = url
-  anchor.download = `myfinman-migration-${stamp}.md`
+  anchor.download = filename
   document.body.appendChild(anchor)
   anchor.click()
   anchor.remove()
   URL.revokeObjectURL(url)
+  return { checkpointId, exportedAt, filename }
 }
