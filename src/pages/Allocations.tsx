@@ -6,19 +6,183 @@ import { portfolioDirectValueSar, portfolioRollupValueSar } from '../domain/fina
 import { portfolioCoverage } from '../domain/lifecycle'
 import type { Portfolio, PortfolioProfile } from '../domain/types'
 
-const money=new Intl.NumberFormat('ar-SA',{maximumFractionDigits:2})
-const profiles:{value:PortfolioProfile;label:string}[]=[{value:'investment',label:'استثمار'},{value:'savings_goal',label:'ادخار/هدف'},{value:'reserve',label:'احتياطي'},{value:'commitment',label:'التزام'},{value:'spending_budget',label:'ميزانية إنفاق'},{value:'deal',label:'عملية'}]
+const money = new Intl.NumberFormat('ar-SA', { maximumFractionDigits: 2 })
+const profiles: { value: PortfolioProfile; label: string }[] = [
+  { value: 'investment', label: 'استثمار' },
+  { value: 'savings_goal', label: 'ادخار/هدف' },
+  { value: 'reserve', label: 'احتياطي' },
+  { value: 'commitment', label: 'التزام' },
+  { value: 'spending_budget', label: 'ميزانية إنفاق' },
+  { value: 'deal', label: 'عملية' },
+]
 
-export function Allocations(){const finance=useFinance();const toast=useToast();const{state}=finance;const roots=state.portfolios.filter(p=>!p.parentId&&p.status==='active');const[editing,setEditing]=useState<Portfolio|null>(null)
- return <div className="page-stack"><section className="section-intro"><div><span className="eyebrow">PORTFOLIO = WHY</span><h2>المحافظ</h2><p>المحفظة تصف الغرض الاقتصادي للأصول ولا تحتويها مكانيًا. يمكنك تعديل بياناتها أو حذفها؛ حذفها يحرر التخصيصات إلى السيولة الحرة دون حركة مالية وهمية.</p></div></section><section className="portfolio-tree">{roots.length===0?<div className="empty-preview"><Layers3/><strong>لا توجد محافظ بعد</strong><span>أنشئ أول محفظة من العمليات المالية.</span></div>:roots.map(root=><PortfolioNode key={root.id} portfolio={root} depth={0}/>)}</section>{editing&&<PortfolioEditor portfolio={editing} onClose={()=>setEditing(null)} onSave={input=>{try{finance.updatePortfolio(input);toast.success('تم تعديل المحفظة.');setEditing(null)}catch(e){toast.error(e instanceof Error?e.message:'تعذر تعديل المحفظة')}}}/>}</div>
+export function Allocations() {
+  const finance = useFinance()
+  const toast = useToast()
+  const { state } = finance
+  const roots = state.portfolios.filter(p => !p.parentId && p.status === 'active')
+  const [editing, setEditing] = useState<Portfolio | null>(null)
 
- function PortfolioNode({portfolio,depth}:{portfolio:Portfolio;depth:number}){const children=state.portfolios.filter(p=>p.parentId===portfolio.id&&p.status==='active');const[open,setOpen]=useState(true);const rollup=portfolioRollupValueSar(state,portfolio.id);const direct=portfolioDirectValueSar(state,portfolio.id);const target=portfolio.targetValueSar;const spendingLike=portfolio.profile==='commitment'||portfolio.profile==='spending_budget';const coverage=spendingLike?portfolioCoverage(state,portfolio.id):null;const ratioBase=coverage?coverage.requiredSar:target;const ratio=ratioBase?Math.min(100,Math.max(0,rollup/ratioBase*100)):null;const ownerNames=portfolio.ownerIds.map(id=>state.parties.find(p=>p.id===id)?.name??id).join('، ');const slices=state.portfolioSlices.filter(s=>s.portfolioId===portfolio.id);const portfolioPositions=(state.positions??[]).filter(p=>p.portfolioId===portfolio.id);const portfolioCycles=(state.capitalCycles??[]).filter(c=>c.portfolioId===portfolio.id)
-  return <article className={`portfolio-node depth-${Math.min(depth,3)}`}><div className="portfolio-node-head"><button className="portfolio-node-expand" onClick={()=>setOpen(!open)}><div className="tree-title"><div className="tree-avatar"><Layers3 size={18}/></div><div><strong>{portfolio.name}</strong><span>المالك: {ownerNames}{portfolio.profile?` • ${profileName(portfolio.profile)}`:''}</span></div></div><div className="tree-summary"><strong>{money.format(rollup)} ر.س</strong>{children.length||slices.length?(open?<ChevronDown size={18}/>:<ChevronLeft size={18}/>):null}</div></button><div className="category-node-actions"><button title="تعديل" onClick={()=>setEditing(portfolio)}><Pencil size={14}/></button><button title="حذف" onClick={()=>{if(!window.confirm(`حذف محفظة «${portfolio.name}»؟ ستتحرر تخصيصاتها إلى السيولة الحرة ويبقى التاريخ محفوظًا.`))return;try{finance.archivePortfolio(portfolio.id);toast.success('تم حذف المحفظة من الاستخدام النشط وتحرير تخصيصاتها.')}catch(e){toast.error(e instanceof Error?e.message:'تعذر حذف المحفظة')}}}><Trash2 size={14}/></button></div></div>
-  {target!=null&&<div className="portfolio-progress"><div><span><Target size={13}/>{coverage?`الهدف ${money.format(coverage.originalTargetSar)} • صُرف ${money.format(coverage.spentSar)} • المتبقي ${money.format(coverage.requiredSar)} ر.س`:`الهدف/المطلوب ${money.format(target)} ر.س`}</span><strong>{Math.round(ratio??0)}%</strong></div><div className="progress"><span style={{width:`${ratio??0}%`}}/></div></div>}
-  {coverage&&<div className="portfolio-direct"><span>الرصيد المخصص {money.format(coverage.economicCoverageSar)} ر.س • الجاهز نقديًا {money.format(coverage.settlementReadySar)} ر.س</span><strong>{coverage.requiredSar<=0?'مكتمل':`${Math.round(coverage.settlementReadyPct)}% جاهز`}</strong></div>}
-  {open&&<div className="portfolio-node-body">{(portfolioPositions.length>0||portfolioCycles.length>0)&&<div className="portfolio-direct"><span>{portfolioPositions.filter(p=>p.status!=='closed').length} مراكز مفتوحة • {portfolioPositions.filter(p=>p.status==='closed').length} مغلقة</span><strong>{portfolioCycles.filter(c=>c.status!=='closed').length} دورات نشطة</strong></div>}{direct>0&&<div className="portfolio-direct"><span>أصول مخصصة مباشرة</span><strong>{money.format(direct)} ر.س</strong></div>}{slices.map(slice=>{const asset=state.holdings.find(x=>x.id===slice.holdingId);return asset&&!asset.archived&&slice.quantity>0?<div className="asset-row" key={slice.id}><div className="asset-icon">{asset.symbol.slice(0,2)}</div><div className="grow"><strong>{asset.name}</strong><span>{slice.quantity.toLocaleString('ar-SA')} {asset.nativeUnit}</span></div><div className="amount">{money.format(slice.quantity*asset.marketPriceSar)} <small>ر.س</small></div></div>:null})}{portfolioCycles.map(c=><div className="asset-row" key={c.id}><div className="asset-icon">د</div><div className="grow"><strong>{c.name}</strong><span>{c.status==='closed'?'دورة مغلقة — النتيجة مثبتة':`دورة مفتوحة • التزام ${money.format(c.openObligationSar)} ر.س`}</span></div><div className="amount">{c.status==='closed'?`${money.format(c.reportingResultSar??c.realizedGainsSar-c.realizedLossesSar-c.directCostsSar)} ر.س`:'نشطة'}</div></div>)}{children.map(child=><PortfolioNode key={child.id} portfolio={child} depth={depth+1}/>)}</div>}</article>}
+  function PortfolioNode({ portfolio, depth }: { portfolio: Portfolio; depth: number }) {
+    const children = state.portfolios.filter(p => p.parentId === portfolio.id && p.status === 'active')
+    const [open, setOpen] = useState(true)
+    const rollup = portfolioRollupValueSar(state, portfolio.id)
+    const direct = portfolioDirectValueSar(state, portfolio.id)
+    const target = portfolio.targetValueSar
+    const spendingLike = portfolio.profile === 'commitment' || portfolio.profile === 'spending_budget'
+    const coverage = spendingLike ? portfolioCoverage(state, portfolio.id) : null
+    const ratioBase = coverage ? coverage.requiredSar : target
+    const ratio = ratioBase ? Math.min(100, Math.max(0, rollup / ratioBase * 100)) : null
+    const ownerNames = portfolio.ownerIds.map(id => state.parties.find(p => p.id === id)?.name ?? id).join('، ')
+    const slices = state.portfolioSlices.filter(s => s.portfolioId === portfolio.id)
+    const portfolioPositions = (state.positions ?? []).filter(p => p.portfolioId === portfolio.id)
+    const portfolioCycles = (state.capitalCycles ?? []).filter(c => c.portfolioId === portfolio.id)
+
+    return <article className={`portfolio-node depth-${Math.min(depth, 3)}`}>
+      <div className="portfolio-node-head">
+        <button className="portfolio-node-expand" onClick={() => setOpen(!open)}>
+          <div className="tree-title">
+            <div className="tree-avatar"><Layers3 size={18} /></div>
+            <div>
+              <strong>{portfolio.name}</strong>
+              <span>المالك: {ownerNames}{portfolio.profile ? ` • ${profileName(portfolio.profile)}` : ''}</span>
+            </div>
+          </div>
+          <div className="tree-summary">
+            <strong>{money.format(rollup)} ر.س</strong>
+            {children.length || slices.length ? (open ? <ChevronDown size={18} /> : <ChevronLeft size={18} />) : null}
+          </div>
+        </button>
+        <div className="category-node-actions">
+          <button title="تعديل" onClick={() => setEditing(portfolio)}><Pencil size={14} /></button>
+          <button title="حذف" onClick={() => {
+            if (!window.confirm(`حذف محفظة «${portfolio.name}»؟ ستتحرر تخصيصاتها إلى السيولة الحرة ويبقى التاريخ محفوظًا.`)) return
+            try {
+              finance.archivePortfolio(portfolio.id)
+              toast.success('تم حذف المحفظة من الاستخدام النشط وتحرير تخصيصاتها.')
+            } catch (e) {
+              toast.error(e instanceof Error ? e.message : 'تعذر حذف المحفظة')
+            }
+          }}><Trash2 size={14} /></button>
+        </div>
+      </div>
+
+      {target != null && <div className="portfolio-progress">
+        <div>
+          <span><Target size={13} />{coverage ? `الهدف ${money.format(coverage.originalTargetSar)} • صُرف ${money.format(coverage.spentSar)} • المتبقي ${money.format(coverage.requiredSar)} ر.س` : `الهدف/المطلوب ${money.format(target)} ر.س`}</span>
+          <strong>{Math.round(ratio ?? 0)}%</strong>
+        </div>
+        <div className="progress"><span style={{ width: `${ratio ?? 0}%` }} /></div>
+      </div>}
+
+      {coverage && <div className="portfolio-direct">
+        <span>الرصيد المخصص {money.format(coverage.economicCoverageSar)} ر.س • الجاهز نقديًا {money.format(coverage.settlementReadySar)} ر.س</span>
+        <strong>{coverage.requiredSar <= 0 ? 'مكتمل' : `${Math.round(coverage.settlementReadyPct)}% جاهز`}</strong>
+      </div>}
+
+      {open && <div className="portfolio-node-body">
+        {(portfolioPositions.length > 0 || portfolioCycles.length > 0) && <div className="portfolio-direct">
+          <span>{portfolioPositions.filter(p => p.status !== 'closed').length} مراكز مفتوحة • {portfolioPositions.filter(p => p.status === 'closed').length} مغلقة</span>
+          <strong>{portfolioCycles.filter(c => c.status !== 'closed').length} دورات نشطة</strong>
+        </div>}
+        {direct > 0 && <div className="portfolio-direct"><span>أصول مخصصة مباشرة</span><strong>{money.format(direct)} ر.س</strong></div>}
+        {slices.map(slice => {
+          const asset = state.holdings.find(x => x.id === slice.holdingId)
+          return asset && !asset.archived && slice.quantity > 0 ? <div className="asset-row" key={slice.id}>
+            <div className="asset-icon">{asset.symbol.slice(0, 2)}</div>
+            <div className="grow"><strong>{asset.name}</strong><span>{slice.quantity.toLocaleString('ar-SA')} {asset.nativeUnit}</span></div>
+            <div className="amount">{money.format(slice.quantity * asset.marketPriceSar)} <small>ر.س</small></div>
+          </div> : null
+        })}
+        {portfolioCycles.map(c => <div className="asset-row" key={c.id}>
+          <div className="asset-icon">د</div>
+          <div className="grow"><strong>{c.name}</strong><span>{c.status === 'closed' ? 'دورة مغلقة — النتيجة مثبتة' : `دورة مفتوحة • التزام ${money.format(c.openObligationSar)} ر.س`}</span></div>
+          <div className="amount">{c.status === 'closed' ? `${money.format(c.reportingResultSar ?? c.realizedGainsSar - c.realizedLossesSar - c.directCostsSar)} ر.س` : 'نشطة'}</div>
+        </div>)}
+        {children.map(child => <PortfolioNode key={child.id} portfolio={child} depth={depth + 1} />)}
+      </div>}
+    </article>
+  }
+
+  return <div className="page-stack">
+    <section className="section-intro">
+      <div>
+        <span className="eyebrow">PORTFOLIO = WHY</span>
+        <h2>المحافظ</h2>
+        <p>المحفظة تصف الغرض الاقتصادي للأصول ولا تحتويها مكانيًا. يمكنك تعديل بياناتها أو حذفها؛ حذفها يحرر التخصيصات إلى السيولة الحرة دون حركة مالية وهمية.</p>
+      </div>
+    </section>
+    <section className="portfolio-tree">
+      {roots.length === 0 ? <div className="empty-preview"><Layers3 /><strong>لا توجد محافظ بعد</strong><span>أنشئ أول محفظة من العمليات المالية.</span></div> : roots.map(root => <PortfolioNode key={root.id} portfolio={root} depth={0} />)}
+    </section>
+    {editing && <PortfolioEditor portfolio={editing} onClose={() => setEditing(null)} onSave={input => {
+      try {
+        finance.updatePortfolio(input)
+        toast.success('تم تعديل المحفظة.')
+        setEditing(null)
+      } catch (e) {
+        toast.error(e instanceof Error ? e.message : 'تعذر تعديل المحفظة')
+      }
+    }} />}
+  </div>
 }
 
-function PortfolioEditor({portfolio,onClose,onSave}:{portfolio:Portfolio;onClose:()=>void;onSave:(input:any)=>void}){const finance=useFinance();const active=finance.state.portfolios.filter(p=>p.status==='active'&&p.id!==portfolio.id);const owners=finance.state.parties.filter(p=>p.type==='self'||p.type==='person');const[name,setName]=useState(portfolio.name);const[ownerId,setOwner]=useState(portfolio.ownerIds[0]??owners[0]?.id??'');const[parentId,setParent]=useState(portfolio.parentId??'');const[profile,setProfile]=useState<PortfolioProfile>(portfolio.profile??'investment');const[purpose,setPurpose]=useState(portfolio.purpose??'');const[target,setTarget]=useState(portfolio.targetValueSar==null?'':String(portfolio.targetValueSar));const[dueDate,setDueDate]=useState(portfolio.dueDate??'');const[settlement,setSettlement]=useState(portfolio.settlementAssetSymbol??'');const[protection,setProtection]=useState(portfolio.protectionMode??'flexible');const submit=(e:FormEvent)=>{e.preventDefault();onSave({id:portfolio.id,name,ownerId,parentId:parentId||undefined,profile,purpose:purpose||undefined,targetValueSar:target.trim()?Number(target):undefined,dueDate:dueDate||undefined,settlementAssetSymbol:settlement||undefined,protectionMode:protection})};return <div className="modal-backdrop" onMouseDown={e=>{if(e.target===e.currentTarget)onClose()}}><section className="expense-modal category-modal" role="dialog" aria-modal="true"><button className="modal-close" onClick={onClose}><X size={18}/></button><div className="panel-head"><div><span>تعديل كامل</span><h2>{portfolio.name}</h2></div></div><form className="trade-form" onSubmit={submit}><div className="field-grid"><label><span>الاسم</span><input value={name} onChange={e=>setName(e.target.value)}/></label><label><span>المالك</span><select value={ownerId} onChange={e=>setOwner(e.target.value)}>{owners.map(o=><option key={o.id} value={o.id}>{o.name}</option>)}</select></label></div><div className="field-grid"><label><span>المحفظة الأب</span><select value={parentId} onChange={e=>setParent(e.target.value)}><option value="">جذرية</option>{active.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}</select></label><label><span>السلوك</span><select value={profile} onChange={e=>setProfile(e.target.value as PortfolioProfile)}>{profiles.map(x=><option key={x.value} value={x.value}>{x.label}</option>)}</select></label></div><label><span>الغرض</span><input value={purpose} onChange={e=>setPurpose(e.target.value)}/></label><div className="field-grid three"><label><span>الهدف بالريال</span><input value={target} onChange={e=>setTarget(e.target.value)} inputMode="decimal"/></label><label><span>تاريخ الاستحقاق</span><input type="date" value={dueDate} onChange={e=>setDueDate(e.target.value)}/></label><label><span>أصل التسوية</span><input value={settlement} onChange={e=>setSettlement(e.target.value.toUpperCase())}/></label></div><label><span>الحماية</span><select value={protection} onChange={e=>setProtection(e.target.value as typeof protection)}><option value="flexible">مرن</option><option value="designated">مخصص</option><option value="hard_reserved">محجوز بصرامة</option><option value="instrument_bound">مرتبط بأداة</option></select></label><button className="primary wide" type="submit">حفظ التعديل</button></form></section></div>}
+function PortfolioEditor({ portfolio, onClose, onSave }: { portfolio: Portfolio; onClose: () => void; onSave: (input: any) => void }) {
+  const finance = useFinance()
+  const active = finance.state.portfolios.filter(p => p.status === 'active' && p.id !== portfolio.id)
+  const owners = finance.state.parties.filter(p => p.type === 'self' || p.type === 'person')
+  const [name, setName] = useState(portfolio.name)
+  const [ownerId, setOwner] = useState(portfolio.ownerIds[0] ?? owners[0]?.id ?? '')
+  const [parentId, setParent] = useState(portfolio.parentId ?? '')
+  const [profile, setProfile] = useState<PortfolioProfile>(portfolio.profile ?? 'investment')
+  const [purpose, setPurpose] = useState(portfolio.purpose ?? '')
+  const [target, setTarget] = useState(portfolio.targetValueSar == null ? '' : String(portfolio.targetValueSar))
+  const [dueDate, setDueDate] = useState(portfolio.dueDate ?? '')
+  const [settlement, setSettlement] = useState(portfolio.settlementAssetSymbol ?? '')
+  const [protection, setProtection] = useState(portfolio.protectionMode ?? 'flexible')
+
+  const submit = (e: FormEvent) => {
+    e.preventDefault()
+    onSave({
+      id: portfolio.id,
+      name,
+      ownerId,
+      parentId: parentId || undefined,
+      profile,
+      purpose: purpose || undefined,
+      targetValueSar: target.trim() ? Number(target) : undefined,
+      dueDate: dueDate || undefined,
+      settlementAssetSymbol: settlement || undefined,
+      protectionMode: protection,
+    })
+  }
+
+  return <div className="modal-backdrop" onMouseDown={e => { if (e.target === e.currentTarget) onClose() }}>
+    <section className="expense-modal category-modal" role="dialog" aria-modal="true">
+      <button className="modal-close" onClick={onClose}><X size={18} /></button>
+      <div className="panel-head"><div><span>تعديل كامل</span><h2>{portfolio.name}</h2></div></div>
+      <form className="trade-form" onSubmit={submit}>
+        <div className="field-grid">
+          <label><span>الاسم</span><input value={name} onChange={e => setName(e.target.value)} /></label>
+          <label><span>المالك</span><select value={ownerId} onChange={e => setOwner(e.target.value)}>{owners.map(o => <option key={o.id} value={o.id}>{o.name}</option>)}</select></label>
+        </div>
+        <div className="field-grid">
+          <label><span>المحفظة الأب</span><select value={parentId} onChange={e => setParent(e.target.value)}><option value="">جذرية</option>{active.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}</select></label>
+          <label><span>السلوك</span><select value={profile} onChange={e => setProfile(e.target.value as PortfolioProfile)}>{profiles.map(x => <option key={x.value} value={x.value}>{x.label}</option>)}</select></label>
+        </div>
+        <label><span>الغرض</span><input value={purpose} onChange={e => setPurpose(e.target.value)} /></label>
+        <div className="field-grid three">
+          <label><span>الهدف بالريال</span><input value={target} onChange={e => setTarget(e.target.value)} inputMode="decimal" /></label>
+          <label><span>تاريخ الاستحقاق</span><input type="date" value={dueDate} onChange={e => setDueDate(e.target.value)} /></label>
+          <label><span>أصل التسوية</span><input value={settlement} onChange={e => setSettlement(e.target.value.toUpperCase())} /></label>
+        </div>
+        <label><span>الحماية</span><select value={protection} onChange={e => setProtection(e.target.value as typeof protection)}><option value="flexible">مرن</option><option value="designated">مخصص</option><option value="hard_reserved">محجوز بصرامة</option><option value="instrument_bound">مرتبط بأداة</option></select></label>
+        <button className="primary wide" type="submit">حفظ التعديل</button>
+      </form>
+    </section>
+  </div>
 }
-function profileName(profile:string){return({spending_budget:'ميزانية إنفاق',commitment:'التزام',savings_goal:'ادخار/هدف',reserve:'احتياطي',investment:'استثمار',deal:'عملية'} as Record<string,string>)[profile]??profile}
+
+function profileName(profile: string) {
+  return ({ spending_budget: 'ميزانية إنفاق', commitment: 'التزام', savings_goal: 'ادخار/هدف', reserve: 'احتياطي', investment: 'استثمار', deal: 'عملية' } as Record<string, string>)[profile] ?? profile
+}
