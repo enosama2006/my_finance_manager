@@ -63,7 +63,7 @@ describe('exact cost-basis lots and FX opening basis', () => {
       quantity: 0, marketPriceSar: 3.75, currency: 'USD', performanceRole: 'transactional_cash',
     })
     const usd = state.holdings.find(h => h.symbol === 'USD')!
-    state = setAssetOpeningBalance(state, { assetId: usd.id, ownerId: SELF_ID, quantity: 1_000, unitCostSar: 3.70 })
+    state = setAssetOpeningBalance(state, { assetId: usd.id, ownerId: SELF_ID, quantity: 1_000, unitCostSar: 3.70, historicalBasisKnown: true })
     const updated = state.holdings.find(h => h.id === usd.id)!
     const opening = state.ledger[0]
 
