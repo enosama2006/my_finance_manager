@@ -20,7 +20,8 @@ export function updateAssetFull(state: FinanceState, input: UpdateAssetFullInput
   const oldAsset = state.holdings.find(h => h.id === input.id)!
   const oldCost = ownerHoldingCostBasisSar(oldAsset, ownerId) ?? 0
   const newCost = round2(input.costBasisSar)
-  const unitCost = asset.quantity > 0 ? round2(newCost / asset.quantity) : undefined
+  // Keep enough precision in unit cost so quantity × unitCost reproduces the exact user-entered total basis.
+  const unitCost = asset.quantity > 0 ? newCost / asset.quantity : undefined
   const acquiredAt = asset.costLots.find(l => l.ownerId === ownerId)?.acquiredAt ?? now()
   const corrected = { ...asset, costLots: asset.quantity > 0 ? [{ id: id('lot'), ownerId, quantity: asset.quantity, unitCostSar: unitCost, acquiredAt }] : [] }
   if (Math.abs(oldCost - newCost) <= 0.009) return { ...next, holdings: next.holdings.map(h => h.id === asset.id ? corrected : h) }
