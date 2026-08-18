@@ -58,8 +58,10 @@ describe('audited asset purchase correction', () => {
     expect(corrected.ledger.filter(t => t.kind === 'real_transfer')).toHaveLength(0)
     expect(correctedTx.version).toBe(2)
     expect(correctedTx.revisions).toHaveLength(1)
-    expect(correctedTx.userInput?.kind).toBe('asset_purchase')
-    expect(correctedTx.userInput?.targetAccountId).toBe(goldAccount.id)
+    const correctedInput = correctedTx.userInput
+    expect(correctedInput?.kind).toBe('asset_purchase')
+    if (correctedInput?.kind !== 'asset_purchase') throw new Error('Expected asset_purchase user input')
+    expect(correctedInput.targetAccountId).toBe(goldAccount.id)
   })
 
   it('can correct the bank/source that was charged and restores the old source first', () => {
@@ -105,8 +107,10 @@ describe('audited asset purchase correction', () => {
     const hydrated = hydrateTransactionUserInputs(legacy)
     const tx = hydrated.ledger.find(t => t.id === purchase.id)!
     expect(hydrated.accounts[0].currency).toBe('SAR')
-    expect(tx.userInput?.kind).toBe('asset_purchase')
-    expect(tx.userInput?.sourceHoldingId).toBe(purchase.sourceHoldingId)
-    expect(tx.userInput?.targetAccountId).toBe(hydrated.holdings.find(h => h.id === purchase.targetHoldingId)!.accountId)
+    const hydratedInput = tx.userInput
+    expect(hydratedInput?.kind).toBe('asset_purchase')
+    if (hydratedInput?.kind !== 'asset_purchase') throw new Error('Expected hydrated asset_purchase user input')
+    expect(hydratedInput.sourceHoldingId).toBe(purchase.sourceHoldingId)
+    expect(hydratedInput.targetAccountId).toBe(hydrated.holdings.find(h => h.id === purchase.targetHoldingId)!.accountId)
   })
 })
