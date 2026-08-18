@@ -2,8 +2,8 @@
 
 Status: **Accepted**
 Captured: `2026-08-17`
-Related: `ENT-010 Account`, `ENT-020 Asset`, `ENT-030 Holding`, `RULE-009`, `CALC-004`, `UC-TRF-001`, `UC-CONV-001`
-Source decision: `docs/cash-model-note.md`
+Related: `ENT-010 Account`, `ENT-020 Asset`, `ENT-030 Holding`, `RULE-009`, `CALC-004`, `UC-TRF-001`, `UC-CONV-001`, `ADR-004` (Group → Asset supersession), `ADR-009` (FX realization refinement)
+Source decision content: consolidated into `docs/spec/product/product-concept.md §6-7`
 
 ## Context
 
