@@ -162,10 +162,25 @@ export function transferBetweenAssets(state: FinanceState, input: TransferBetwee
   const transferredBasis = sourceCost == null ? undefined : input.quantity * sourceCost
   const nextSource = setOwnerQuantity(source, input.ownerId, roundQuantity(sourceOwned - input.quantity), knownSourceCost)
   const targetOwned = ownerQuantity(target, input.ownerId)
-  const targetUnitBasis = transferredBasis == null ? undefined : transferredBasis / targetQuantity
-  const nextTarget = setOwnerQuantity(target, input.ownerId, roundQuantity(targetOwned + targetQuantity), targetUnitBasis, transferredBasis)
   const reportingValueSar = round2(input.quantity * source.marketPriceSar)
-  const realized = sameCurrency || transferredBasis == null ? null : round2(reportingValueSar - transferredBasis)
+
+  // ADR-009: same currency carries basis; cross-currency realizes and re-establishes basis at market.
+  let targetUnitBasis: number | undefined
+  let targetBasisSar: number | undefined
+  let realized: number | null
+  if (sameCurrency) {
+    targetUnitBasis = transferredBasis == null ? undefined : transferredBasis / targetQuantity
+    targetBasisSar = transferredBasis
+    realized = null
+  } else {
+    // Target unit value in SAR at execution: base currency = 1 (RULE-024); otherwise derived from execution.
+    const targetIsSar = target.symbol.toUpperCase() === 'SAR'
+    const targetUnitSarAtExec = targetIsSar ? 1 : reportingValueSar / targetQuantity
+    targetUnitBasis = targetUnitSarAtExec
+    targetBasisSar = round2(targetQuantity * targetUnitSarAtExec)
+    realized = transferredBasis == null ? null : round2(targetBasisSar - transferredBasis)
+  }
+  const nextTarget = setOwnerQuantity(target, input.ownerId, roundQuantity(targetOwned + targetQuantity), targetUnitBasis, targetBasisSar)
 
   const tx: LedgerTransaction = {
     id: id('tx'), version: 1, status: 'posted', revisions: [], at: now(), kind: 'real_transfer',
@@ -181,7 +196,7 @@ export function transferBetweenAssets(state: FinanceState, input: TransferBetwee
     realizedGainLossSar: realized,
     note: input.note?.trim() || (sameCurrency
       ? (transferredBasis == null ? 'نقل بين أصلين نقديين بنفس العملة؛ التكلفة التاريخية للمصدر غير معروفة فبقيت غير معروفة.' : 'نقل بين أصلين نقديين بنفس العملة؛ لا يغير Cost Basis الإجمالية.')
-      : `FX Transfer بسعر ${exchangeRate} ${source.symbol}/${target.symbol}. المبلغ المصدر ${roundQuantity(input.quantity)} ${source.symbol} والمستلم ${targetQuantity} ${target.symbol}.`),
+      : `FX Conversion (ADR-009): ${roundQuantity(input.quantity)} ${source.symbol} → ${targetQuantity} ${target.symbol} at ${exchangeRate} ${source.symbol}/${target.symbol}. Target basis re-established at market; source disposal realized.`),
   }
   return { ...state, schemaVersion: 5, holdings: state.holdings.map(h => h.id === source.id ? nextSource : h.id === target.id ? nextTarget : h), ledger: [tx, ...state.ledger] }
 }
