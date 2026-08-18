@@ -4,6 +4,7 @@ import type { Account, AccountGroup, FinanceState } from '../domain/types'
 type NodeChoice = { type: 'group'; id: string; label: string } | { type: 'account'; id: string; label: string }
 
 const UNGROUPED = '__ungrouped__'
+const byArabicName = <T extends { name: string }>(a: T, b: T) => a.name.localeCompare(b.name, 'ar')
 
 function groupPath(groups: AccountGroup[], groupId?: string): AccountGroup[] {
   if (!groupId) return []
@@ -19,13 +20,13 @@ function groupPath(groups: AccountGroup[], groupId?: string): AccountGroup[] {
 }
 
 function roots(groups: AccountGroup[]) {
-  return groups.filter(g => !g.parentId || !groups.some(parent => parent.id === g.parentId))
+  return groups.filter(g => !g.parentId || !groups.some(parent => parent.id === g.parentId)).sort(byArabicName)
 }
 
 function choicesForGroup(groups: AccountGroup[], accounts: Account[], groupId: string): NodeChoice[] {
   return [
-    ...groups.filter(g => g.parentId === groupId).map(g => ({ type: 'group' as const, id: g.id, label: g.name })),
-    ...accounts.filter(a => a.groupId === groupId).map(a => ({ type: 'account' as const, id: a.id, label: a.name })),
+    ...groups.filter(g => g.parentId === groupId).sort(byArabicName).map(g => ({ type: 'group' as const, id: g.id, label: g.name })),
+    ...accounts.filter(a => a.groupId === groupId).sort(byArabicName).map(a => ({ type: 'account' as const, id: a.id, label: a.name })),
   ]
 }
 
@@ -57,8 +58,8 @@ export function AccountCascader({
     setSelectedGroups(selectedAccount.groupId ? groupPath(groups, selectedAccount.groupId).map(g => g.id) : [UNGROUPED])
   }, [selectedAccount?.id, selectedAccount?.groupId, groups])
 
-  const rootGroups = roots(groups)
-  const ungroupedAccounts = eligible.filter(a => !a.groupId || !groups.some(g => g.id === a.groupId))
+  const rootGroups = roots([...groups])
+  const ungroupedAccounts = eligible.filter(a => !a.groupId || !groups.some(g => g.id === a.groupId)).sort(byArabicName)
   const rootValue = selectedGroups[0] ?? ''
 
   const chooseRoot = (next: string) => {
