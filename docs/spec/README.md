@@ -14,7 +14,7 @@ When two sources conflict, use this order:
 
 1. Latest explicit user decision recorded as `Approved` in this specification.
 2. `docs/spec/decisions/decision-log.md` and approved ADRs.
-3. `docs/spec/domain/domain-model.md` and `docs/domain-rules.md`.
+3. `docs/spec/product/product-concept.md` and `docs/spec/domain/domain-model.md`.
 4. Approved screen/use-case specifications in this directory.
 5. Existing implementation and prototype behavior.
 6. AI inference.
@@ -56,7 +56,7 @@ IDs are never recycled after publication.
 ## 5. Documentation map
 
 ### Product and scope
-- `product/product-definition.md` — what MyFinMan is and is not.
+- `product/product-concept.md` — **canonical product concept**: dimensions, rules, scenarios, examples, and explicitly superseded ideas.
 - `prototype/prototype-vs-target.md` — what the current proof-of-concept means for the future rewrite.
 
 ### Benchmark ambitions

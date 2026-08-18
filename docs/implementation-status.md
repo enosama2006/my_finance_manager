@@ -2,7 +2,7 @@
 
 > Last reconciled: 2026-08-19. Authority order: docs/spec/decisions/ (ADRs + decision-log) → docs/spec/domain/ → docs/spec/quality/invariant-gate.md → this document.
 >
-> V4 Foundation is preserved historically; the target architecture is Group → Asset (ADR-004), canonical facts + rebuildable projections (ADR-008), tree-first UX (ADR-006), file-backed SQLite (ADR-007), instrument/asset/lot distinction (ADR-005). See docs/architecture-v4.md for the executing prototype baseline; treat that file as V4 stable, not target.
+> V4 Foundation is preserved historically inside the code and prototype behavior; the target architecture is Group → Asset (ADR-004), canonical facts + rebuildable projections (ADR-008), tree-first UX (ADR-006), file-backed SQLite (ADR-007), instrument/asset/lot distinction (ADR-005), FX realization on cash exit (ADR-009). The consolidated product concept lives in `docs/spec/product/product-concept.md`.
 
 ## Target-architecture readiness
 
