@@ -68,7 +68,7 @@ export function realizedProfitByOwner(state: FinanceState, ownerId: string): num
 }
 
 export function holdingsInThirdPartyCustody(state: FinanceState, ownerId: string): Holding[] {
-  return state.holdings.filter((holding) => ownerQuantity(holding, ownerId) > 0 && holding.custodianId !== ownerId)
+  return state.holdings.filter((holding) => ownerQuantity(holding, ownerId) > 0 && holding.custodianId != null && holding.custodianId !== ownerId)
 }
 
 export function accountValueSar(state: FinanceState, accountId: string): number {
