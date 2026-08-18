@@ -26,9 +26,13 @@ export function externalLiabilitiesByOwner(state: FinanceState, ownerId: string)
   return round2(state.liabilities.filter((l) => l.ownerId === ownerId && l.status === 'open').reduce((sum, l) => sum + l.amountSar, 0))
 }
 
+export function claimsValueByOwner(state: FinanceState, ownerId: string): number {
+  return round2(state.claims.filter((c) => c.creditorOwnerId === ownerId && c.status === 'open').reduce((sum, c) => sum + c.quantity * c.unitValueSar, 0))
+}
+
 export function netWorthByOwner(state: FinanceState, ownerId: string): number {
   const assets = state.holdings.filter((h) => !h.archived).reduce((sum, holding) => sum + ownerHoldingValueSar(holding, ownerId), 0)
-  return round2(assets - externalLiabilitiesByOwner(state, ownerId))
+  return round2(assets + claimsValueByOwner(state, ownerId) - externalLiabilitiesByOwner(state, ownerId))
 }
 
 export function allocatedQuantity(state: FinanceState, holdingId: string, ownerId: string): number {
