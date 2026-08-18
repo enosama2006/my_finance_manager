@@ -53,7 +53,20 @@ export interface Account {
 }
 
 export interface OwnershipShare { id?: string; ownerId: string; quantity: number }
-export interface CostBasisLot { id: string; ownerId: string; quantity: number; unitCostSar?: number; acquiredAt?: string }
+/**
+ * Quantity + totalCostBasisSar are the canonical financial facts for a known-basis lot.
+ * unitCostSar is retained for backwards compatibility and UI convenience, but must not be
+ * rounded before persistence. Old snapshots without totalCostBasisSar remain readable.
+ */
+export interface CostBasisLot {
+  id: string
+  ownerId: string
+  quantity: number
+  unitCostSar?: number
+  totalCostBasisSar?: number
+  sourceTransactionId?: string
+  acquiredAt?: string
+}
 
 /** Canonical financial entity. It never contains another Asset; only Groups contain Assets. */
 export interface Holding {
@@ -209,6 +222,8 @@ export interface TransactionRevision {
     at: string
     title: string
     amountSar: number
+    /** Historical/acquisition basis when known; null means explicitly unknown. */
+    costBasisSar?: number | null
     ownerId: string
     sourceHoldingId?: string
     targetHoldingId?: string
@@ -234,7 +249,10 @@ export interface LedgerTransaction {
   at: string
   kind: TransactionKind
   title: string
+  /** Reporting/event value in SAR. It is not implicitly the historical basis. */
   amountSar: number
+  /** Historical/acquisition basis when the event defines one; null = explicitly unknown. */
+  costBasisSar?: number | null
   ownerId: string
   sourceHoldingId?: string
   targetHoldingId?: string

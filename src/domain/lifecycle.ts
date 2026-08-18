@@ -1,10 +1,9 @@
-import { holdingValueSar, ownerQuantity, round2 } from './finance'
+import { holdingValueSar, ownerCostBasisSar, ownerQuantity, round2 } from './finance'
 import type { CapitalCycle, FinanceState, Holding, Position } from './types'
 
 export function ownerHoldingCostBasisSar(holding: Holding, ownerId: string): number | null {
-  const lots = holding.costLots.filter(l => l.ownerId === ownerId && l.quantity > 0)
-  if (!lots.length || lots.some(l => l.unitCostSar == null)) return null
-  return round2(lots.reduce((sum, lot) => sum + lot.quantity * (lot.unitCostSar ?? 0), 0))
+  const basis = ownerCostBasisSar(holding, ownerId)
+  return basis == null ? null : round2(basis)
 }
 
 export function holdingUnrealizedGainLossSar(holding: Holding, ownerId: string): number | null {

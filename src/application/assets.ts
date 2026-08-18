@@ -1,5 +1,5 @@
 import { currencyReferenceRateSar } from '../domain/currencies'
-import { ownerQuantity, ownerWeightedAverageCostSar, round2 } from '../domain/finance'
+import { ownerQuantity, ownerWeightedAverageCostSar, resizeCostBasisLot, round2 } from '../domain/finance'
 import type { AccountKind, AssetKind, FinanceState, Holding, LedgerTransaction, PerformanceRole, ValuationMethod } from '../domain/types'
 
 const id = (prefix: string) => `${prefix}-${crypto.randomUUID()}`
@@ -51,15 +51,15 @@ export function createAsset(state: FinanceState, input: CreateAssetInput): Finan
   const marketPriceSar = reference ?? input.marketPriceSar ?? (quantity > 0 && input.costBasisSar != null ? input.costBasisSar / quantity : 1)
   if (!Number.isFinite(marketPriceSar) || marketPriceSar <= 0) throw new Error('القيمة الحالية للوحدة يجب أن تكون أكبر من صفر')
   if (input.costBasisSar != null && input.costBasisSar < 0) throw new Error('التكلفة التاريخية لا يمكن أن تكون سالبة')
-  const unitCost = quantity > 0 && input.costBasisSar != null ? input.costBasisSar / quantity : (quantity > 0 ? marketPriceSar : undefined)
+  const unitCost = quantity > 0 && input.costBasisSar != null ? input.costBasisSar / quantity : undefined
   const asset: Holding = {
     id: id('asset'), name, kind: input.kind, assetTypeId: input.assetTypeId, symbol,
-    nativeUnit: input.nativeUnit.trim() || (input.kind === 'cash' ? symbol : 'وحدة'), quantity: round2(quantity), marketPriceSar: round2(marketPriceSar),
-    costLots: quantity > 0 ? [{ id: id('lot'), ownerId: input.ownerId, quantity: round2(quantity), unitCostSar: unitCost == null ? undefined : round2(unitCost), acquiredAt: now() }] : [],
+    nativeUnit: input.nativeUnit.trim() || (input.kind === 'cash' ? symbol : 'وحدة'), quantity, marketPriceSar: round2(marketPriceSar),
+    costLots: quantity > 0 ? [{ id: id('lot'), ownerId: input.ownerId, quantity, unitCostSar: unitCost, totalCostBasisSar: input.costBasisSar, acquiredAt: now() }] : [],
     valuationMethod: valuationFor(input.kind, symbol), valuationSource: reference != null ? 'currency-reference' : 'user-entry', valuedAt: now(),
     groupId: input.groupId || undefined, accountKind: input.accountKind, currency: input.currency?.trim().toUpperCase() || (input.kind === 'cash' ? symbol : undefined),
     last4: input.last4?.trim() || undefined, institutionName: input.institutionName?.trim() || undefined, description: input.description?.trim() || undefined,
-    location: input.location?.trim() || undefined, ownership: quantity > 0 ? [{ ownerId: input.ownerId, quantity: round2(quantity) }] : [],
+    location: input.location?.trim() || undefined, ownership: quantity > 0 ? [{ ownerId: input.ownerId, quantity }] : [],
     performanceRole: input.performanceRole ?? (input.kind === 'cash' ? 'transactional_cash' : 'investment'),
   }
   return { ...state, schemaVersion: 5, holdings: [...state.holdings, asset] }
@@ -76,8 +76,8 @@ function reduceLots(asset: Holding, ownerId: string, quantityToRemove: number) {
   return asset.costLots.map(lot => {
     if (lot.ownerId !== ownerId || remaining <= 1e-9) return lot
     const used = Math.min(lot.quantity, remaining)
-    remaining = round2(remaining - used)
-    return { ...lot, quantity: round2(lot.quantity - used) }
+    remaining -= used
+    return resizeCostBasisLot(lot, lot.quantity - used)
   }).filter(lot => lot.quantity > 1e-9)
 }
 
@@ -105,27 +105,27 @@ export function updateAsset(state: FinanceState, input: UpdateAssetInput): Finan
   const currentOwnerId = currentOwners.length === 1 ? currentOwners[0].ownerId : input.ownerId
   if (currentOwners.length > 1 && currentOwners.some(x => x.ownerId !== input.ownerId)) throw new Error('الأصل متعدد الملاك؛ تعديل المالك الكامل يحتاج توزيع ملكية صريح')
   const currentQty = asset.quantity
-  const delta = round2(input.quantity - currentQty)
+  const delta = input.quantity - currentQty
   const symbol = input.symbol.trim().toUpperCase() || asset.symbol
   const reference = input.kind === 'cash' ? currencyReferenceRateSar(symbol) : null
   const market = reference ?? input.marketPriceSar ?? asset.marketPriceSar
   if (!Number.isFinite(market) || market <= 0) throw new Error('القيمة الحالية للوحدة يجب أن تكون أكبر من صفر')
 
   let lots = asset.costLots.map(lot => currentOwnerId !== input.ownerId ? { ...lot, ownerId: input.ownerId } : lot)
-  if (delta > 0) {
-    const unitCost = ownerWeightedAverageCostSar(asset, currentOwnerId) ?? market
-    lots = [...lots, { id: id('lot'), ownerId: input.ownerId, quantity: delta, unitCostSar: unitCost, acquiredAt: now() }]
-  } else if (delta < 0) {
+  if (delta > 1e-9) {
+    const unitCost = ownerWeightedAverageCostSar(asset, currentOwnerId)
+    lots = [...lots, { id: id('lot'), ownerId: input.ownerId, quantity: delta, unitCostSar: unitCost ?? undefined, totalCostBasisSar: unitCost == null ? undefined : delta * unitCost, acquiredAt: now() }]
+  } else if (delta < -1e-9) {
     lots = reduceLots({ ...asset, costLots: lots }, input.ownerId, Math.abs(delta))
   }
 
   const updated: Holding = {
     ...asset, name, kind: input.kind, assetTypeId: input.assetTypeId, symbol, nativeUnit: input.nativeUnit.trim() || asset.nativeUnit,
-    quantity: round2(input.quantity), marketPriceSar: round2(market), costLots: lots, valuationMethod: valuationFor(input.kind, symbol),
+    quantity: input.quantity, marketPriceSar: round2(market), costLots: lots, valuationMethod: valuationFor(input.kind, symbol),
     valuationSource: reference != null ? 'currency-reference' : 'user-correction', valuedAt: now(), groupId: input.groupId || undefined,
     accountKind: input.accountKind, currency: input.currency?.trim().toUpperCase() || (input.kind === 'cash' ? symbol : undefined), last4: input.last4?.trim() || undefined,
     institutionName: input.institutionName?.trim() || undefined, description: input.description?.trim() || undefined, location: input.location?.trim() || undefined,
-    ownership: input.quantity > 0 ? [{ ownerId: input.ownerId, quantity: round2(input.quantity) }] : [],
+    ownership: input.quantity > 0 ? [{ ownerId: input.ownerId, quantity: input.quantity }] : [],
     performanceRole: input.performanceRole ?? asset.performanceRole ?? (input.kind === 'cash' ? 'transactional_cash' : 'investment'),
   }
 

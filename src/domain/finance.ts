@@ -83,18 +83,49 @@ export function portfolioRollupValueSar(state: FinanceState, portfolioId: string
   return round2(ids.reduce((sum, id) => sum + portfolioDirectValueSar(state, id), 0))
 }
 
+/** Returns the exact persisted basis for a lot, with backwards-compatible fallback. */
+export function lotCostBasisSar(lot: CostBasisLot): number | null {
+  if (lot.totalCostBasisSar != null) return lot.totalCostBasisSar
+  if (lot.unitCostSar == null) return null
+  return lot.quantity * lot.unitCostSar
+}
+
+export function ownerCostBasisSar(holding: Holding, ownerId: string): number | null {
+  const lots = holding.costLots.filter((lot) => lot.ownerId === ownerId && lot.quantity > 0)
+  if (!lots.length) return null
+  const totals = lots.map(lotCostBasisSar)
+  if (totals.some((value) => value == null)) return null
+  return totals.reduce<number>((sum, value) => sum + (value ?? 0), 0)
+}
+
 export function ownerWeightedAverageCostSar(holding: Holding, ownerId: string): number | null {
   const lots = holding.costLots.filter((lot) => lot.ownerId === ownerId && lot.quantity > 0)
-  if (!lots.length || lots.some((lot) => lot.unitCostSar == null)) return null
+  if (!lots.length) return null
   const quantity = lots.reduce((sum, lot) => sum + lot.quantity, 0)
   if (quantity <= 0) return null
-  return round2(lots.reduce((sum, lot) => sum + lot.quantity * (lot.unitCostSar ?? 0), 0) / quantity)
+  const totalBasis = ownerCostBasisSar(holding, ownerId)
+  if (totalBasis == null) return null
+  return totalBasis / quantity
+}
+
+/** Resize a lot while preserving the same per-unit basis and exact proportional total. */
+export function resizeCostBasisLot(lot: CostBasisLot, nextQuantity: number): CostBasisLot {
+  const quantity = Math.max(0, nextQuantity)
+  const total = lotCostBasisSar(lot)
+  if (lot.quantity <= 0 || total == null) return { ...lot, quantity }
+  const nextTotal = total * (quantity / lot.quantity)
+  return {
+    ...lot,
+    quantity,
+    totalCostBasisSar: nextTotal,
+    unitCostSar: quantity > 0 ? nextTotal / quantity : lot.unitCostSar,
+  }
 }
 
 function reduceOwnerCostLotsWeightedAverage(lots: CostBasisLot[], ownerId: string, quantity: number): CostBasisLot[] {
   const ownerLots = lots.filter((lot) => lot.ownerId === ownerId)
   const total = round2(ownerLots.reduce((sum, lot) => sum + lot.quantity, 0))
-  if (quantity > total) throw new Error('Cost-basis lots do not cover owner quantity')
+  if (quantity > total + 1e-9) throw new Error('Cost-basis lots do not cover owner quantity')
   const targetRemaining = round2(total - quantity)
   if (targetRemaining <= 0) return lots.filter((lot) => lot.ownerId !== ownerId)
 
@@ -108,7 +139,7 @@ function reduceOwnerCostLotsWeightedAverage(lots: CostBasisLot[], ownerId: strin
       ? round2(targetRemaining - assigned)
       : round2((lot.quantity / total) * targetRemaining)
     assigned = round2(assigned + nextQuantity)
-    return { ...lot, quantity: nextQuantity }
+    return resizeCostBasisLot(lot, nextQuantity)
   }).filter((lot) => lot.quantity > 0)
 }
 
@@ -155,6 +186,8 @@ export function applyConversion(state: FinanceState, input: ConversionInput, now
   }
 
   const targetId = `holding-${crypto.randomUUID()}`
+  const targetTotalBasis = preview.proceedsSar + preview.feesSar
+  const targetUnitBasis = targetTotalBasis / input.targetQuantity
   const target: Holding = {
     id: targetId,
     symbol: input.targetSymbol,
@@ -163,7 +196,7 @@ export function applyConversion(state: FinanceState, input: ConversionInput, now
     nativeUnit: input.targetUnit,
     quantity: input.targetQuantity,
     marketPriceSar: input.targetUnitValueSarAtExecution,
-    costLots: [{ id: `lot-${crypto.randomUUID()}`, ownerId: input.ownerId, quantity: input.targetQuantity, unitCostSar: round2((preview.proceedsSar + preview.feesSar) / input.targetQuantity), acquiredAt: now }],
+    costLots: [{ id: `lot-${crypto.randomUUID()}`, ownerId: input.ownerId, quantity: input.targetQuantity, unitCostSar: targetUnitBasis, totalCostBasisSar: targetTotalBasis, acquiredAt: now }],
     valuationMethod: input.targetKind === 'cash' ? (input.targetSymbol === 'SAR' ? 'nominal' : 'fx') : 'market_quote',
     valuationSource: 'execution',
     valuedAt: now,
@@ -198,6 +231,7 @@ export function applyConversion(state: FinanceState, input: ConversionInput, now
     kind: 'conversion',
     title: `${source.symbol} ← ${input.targetSymbol}`,
     amountSar: preview.proceedsSar,
+    costBasisSar: preview.sourceCostBasisSar,
     ownerId: input.ownerId,
     sourceHoldingId: source.id,
     targetHoldingId: target.id,
