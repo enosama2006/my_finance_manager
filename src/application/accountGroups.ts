@@ -38,7 +38,7 @@ export function archiveAccountGroup(state: FinanceState, groupId: string): Finan
   if (all.some(g => g.status === 'active' && g.parentId === groupId)) throw new Error('انقل أو احذف المجموعات الفرعية أولًا')
   if (state.holdings.some(a => !a.archived && a.groupId === groupId)) throw new Error('انقل أو احذف الأصول الموجودة داخل المجموعة أولًا')
   // Compatibility: schema-v4 Account rows can still point at a Group before normalization.
-  if (state.accounts.some(a => a.status === 'active' && a.groupId === groupId)) throw new Error('انقل الحسابات القديمة المرتبطة بهذه المجموعة أولًا')
+  if (state.accounts.some(a => a.status === 'active' && a.groupId === groupId)) throw new Error('انقل الحسابات خارج المجموعة أولًا')
   return { ...state, schemaVersion: 5, accountGroups: all.map(g => g.id === groupId ? { ...g, status: 'archived' } : g) }
 }
 
