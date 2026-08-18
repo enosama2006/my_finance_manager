@@ -5,11 +5,12 @@ import type { AllocateToPortfolioInput, CreatePortfolioInput } from '../applicat
 import type { CreateAssetInput } from '../application/assets'
 import type { AddAssetIncomeInput, SetAssetOpeningBalanceInput, TransferBetweenAssetsInput } from '../application/assetTransactions'
 import { previewSimplifiedPurchase, type SimplifiedPurchaseInput } from '../application/purchase'
+import { GroupAssetCascader } from '../components/GroupAssetCascader'
 import { GroupCascader } from '../components/GroupCascader'
 import { useToast } from '../components/ToastProvider'
 import { assetTypeById, assetTypeCatalog, type AssetTypeId } from '../domain/assetCatalog'
 import { currencyCatalog, currencyReferenceRateSar } from '../domain/currencies'
-import { availableQuantity, ownerQuantity } from '../domain/finance'
+import { availableQuantity, ownerQuantity, ownerWeightedAverageCostSar } from '../domain/finance'
 import type { AccountKind, FinanceState, Holding, Party, Portfolio, PortfolioProfile } from '../domain/types'
 import { fetchMarketQuote, type MarketQuote } from '../data/marketData'
 import { SELF_ID } from '../data/seed'
@@ -20,8 +21,9 @@ const err = (error: unknown) => error instanceof Error ? error.message : 'تعذ
 
 type ActionKey = 'purchase' | 'asset' | 'funds' | 'transfer' | 'portfolio' | 'allocate'
 type NewAssetType = 'cash' | AssetTypeId
+type PurchaseTargetMode = 'new' | 'existing'
 const actions: { id: ActionKey; title: string; sub: string; icon: typeof ShoppingCart }[] = [
-  { id: 'purchase', title: 'شراء أصل', sub: 'أصل نقدي ← أصل جديد', icon: ShoppingCart },
+  { id: 'purchase', title: 'شراء أصل', sub: 'أصل نقدي ← أصل جديد أو زيادة أصل موجود', icon: ShoppingCart },
   { id: 'asset', title: 'إضافة أصل موجود', sub: 'سجّل ما تملكه الآن بأقل حقول ممكنة', icon: PackagePlus },
   { id: 'funds', title: 'إضافة أموال', sub: 'افتتاحي واحد أو دخل متكرر', icon: BanknoteArrowDown },
   { id: 'transfer', title: 'نقل أموال', sub: 'أصل نقدي إلى أصل نقدي', icon: ArrowLeftRight },
@@ -51,7 +53,7 @@ export function OperationsV2({ goTrade }: { goTrade: () => void }) {
     <section className="section-intro operations-intro"><div><span className="eyebrow">GROUP → ASSET</span><h2>العمليات المالية</h2><p>المجموعة هي الحاوية التنظيمية الوحيدة. الأصل هو الحقيقة المالية التي تحمل الرصيد/الكمية والمالك والتكلفة والتقييم وتتم عليها الحركات.</p></div><button className="secondary operations-convert" onClick={goTrade}><ArrowLeftRight size={17}/> تحويل / تسييل أصل</button></section>
     <section className="action-picker">{actions.map(item => { const Icon = item.icon; return <button key={item.id} className={action === item.id ? 'action-choice active' : 'action-choice'} onClick={() => setAction(item.id)}><Icon size={18}/><span><strong>{item.title}</strong><small>{item.sub}</small></span></button> })}</section>
     <section className="operation-workspace"><div className="operation-form-panel">
-      {action === 'purchase' && <PurchaseForm state={state} groups={groups} portfolios={portfolios} onSubmit={input => execute(() => finance.purchaseAsset(input), `تم شراء «${input.name}» ووضعه في المجموعة المختارة.`)}/>} 
+      {action === 'purchase' && <PurchaseForm state={state} groups={groups} portfolios={portfolios} onSubmit={input => execute(() => finance.purchaseAsset(input), `تم تسجيل شراء «${input.name}».`)}/>} 
       {action === 'asset' && <AssetForm groups={groups} owners={owners} onSubmit={input => execute(() => finance.createAsset(input), `تم إنشاء الأصل «${input.name}».`)}/>} 
       {action === 'funds' && <FundsForm state={state} owners={owners} assets={assets} onOpening={input => execute(() => finance.setAssetOpeningBalance(input), 'تم حفظ/تصحيح الرصيد الافتتاحي لنفس الأصل.')} onIncome={input => execute(() => finance.addIncomeToAsset(input), 'تم تسجيل الدخل وإضافته إلى الأصل النقدي.')}/>} 
       {action === 'transfer' && <TransferForm owners={owners} assets={assets} onSubmit={input => execute(() => finance.transferBetweenAssets(input), 'تم النقل بين الأصلين دون ربح أو خسارة.')}/>} 
@@ -61,33 +63,122 @@ export function OperationsV2({ goTrade }: { goTrade: () => void }) {
   </div>
 }
 
-function PurchaseForm({ state, groups, portfolios, onSubmit }: { state: FinanceState; groups: FinanceState['accountGroups']; portfolios: Portfolio[]; onSubmit: (input: SimplifiedPurchaseInput) => void }) {
+function PurchaseForm({ state, groups, portfolios, onSubmit }: { state: FinanceState; groups: FinanceState['accountGroups']; portfolios: Portfolio[]; onSubmit: (input: SimplifiedPurchaseInput) => boolean }) {
   const cashAssets = state.holdings.filter(h => !h.archived && h.kind === 'cash' && ownerQuantity(h, SELF_ID) > 0)
-  const [sourceHoldingId, setSource] = useState(''); const [amountPaid, setAmount] = useState(''); const [targetGroupId, setTargetGroup] = useState('')
-  const [assetTypeId, setAssetType] = useState<AssetTypeId>('gold'); const definition = assetTypeById(assetTypeId)!
-  const [name, setName] = useState(definition.label); const [symbol, setSymbol] = useState(definition.defaultSymbol ?? ''); const [quantity, setQuantity] = useState('')
-  const [portfolioId, setPortfolio] = useState(''); const [location, setLocation] = useState(''); const [extraCosts, setExtraCosts] = useState('0')
-  const [quote, setQuote] = useState<MarketQuote | null>(null); const [quoteState, setQuoteState] = useState<'idle'|'loading'|'live'|'fallback'>('idle')
-  useEffect(() => { const next = assetTypeById(assetTypeId)!; setSymbol(next.defaultSymbol ?? ''); if (assetTypeId === 'gold' || assetTypeId === 'silver') setName(next.label); setQuote(null) }, [assetTypeId])
+  const [sourceHoldingId, setSource] = useState('')
+  const [amountPaid, setAmount] = useState('')
+  const [targetMode, setTargetMode] = useState<PurchaseTargetMode>('new')
+  const [targetAssetId, setTargetAsset] = useState('')
+  const [targetGroupId, setTargetGroup] = useState('')
+  const [assetTypeId, setAssetType] = useState<AssetTypeId>('gold')
+  const definition = assetTypeById(assetTypeId)!
+  const [name, setName] = useState(definition.label)
+  const [symbol, setSymbol] = useState(definition.defaultSymbol ?? '')
+  const [quantity, setQuantity] = useState('')
+  const [portfolioId, setPortfolio] = useState('')
+  const [location, setLocation] = useState('')
+  const [extraCosts, setExtraCosts] = useState('0')
+  const [quote, setQuote] = useState<MarketQuote | null>(null)
+  const [quoteState, setQuoteState] = useState<'idle'|'loading'|'live'|'fallback'>('idle')
+  const [submitting, setSubmitting] = useState(false)
+  const [resetKey, setResetKey] = useState(0)
+
+  const selectedTarget = state.holdings.find(h => h.id === targetAssetId && !h.archived)
+  const effectiveName = selectedTarget?.name ?? (name.trim() || definition.label)
+  const effectiveSymbol = selectedTarget?.symbol ?? (symbol.trim() || definition.defaultSymbol ?? '')
+  const targetAverage = selectedTarget ? ownerWeightedAverageCostSar(selectedTarget, SELF_ID) : null
+  const existingEligible = (asset: Holding) => asset.kind === definition.kind && (!asset.assetTypeId || asset.assetTypeId === assetTypeId) && !asset.ownership.some(s => s.ownerId !== SELF_ID && s.quantity > 0)
+  const sourceEligible = (asset: Holding) => asset.kind === 'cash' && ownerQuantity(asset, SELF_ID) > 0
+
   useEffect(() => {
-    if (!symbol.trim() || ['none','manual_appraisal','contractual'].includes(definition.quoteStrategy)) { setQuote(null); setQuoteState('fallback'); return }
-    let active = true; setQuoteState('loading'); const timer = window.setTimeout(async () => { const result = await fetchMarketQuote({ assetTypeId, symbol, quoteStrategy: definition.quoteStrategy }); if (active) { setQuote(result); setQuoteState(result ? 'live' : 'fallback') } }, 450)
+    const next = assetTypeById(assetTypeId)!
+    if (targetMode === 'new') {
+      setSymbol(next.defaultSymbol ?? '')
+      if (assetTypeId === 'gold' || assetTypeId === 'silver') setName(next.label)
+    }
+    setTargetAsset('')
+    setQuote(null)
+  }, [assetTypeId])
+
+  useEffect(() => {
+    if (targetMode !== 'existing' || !selectedTarget) return
+    setName(selectedTarget.name)
+    setSymbol(selectedTarget.symbol)
+  }, [targetMode, selectedTarget?.id])
+
+  useEffect(() => {
+    if (!effectiveSymbol.trim() || ['none','manual_appraisal','contractual'].includes(definition.quoteStrategy)) { setQuote(null); setQuoteState('fallback'); return }
+    let active = true
+    setQuoteState('loading')
+    const timer = window.setTimeout(async () => {
+      const result = await fetchMarketQuote({ assetTypeId, symbol: effectiveSymbol, quoteStrategy: definition.quoteStrategy })
+      if (active) { setQuote(result); setQuoteState(result ? 'live' : 'fallback') }
+    }, 450)
     return () => { active = false; window.clearTimeout(timer) }
-  }, [assetTypeId, symbol, definition.quoteStrategy])
-  const input: SimplifiedPurchaseInput = { sourceHoldingId, ownerId: SELF_ID, amountPaid: num(amountPaid || '0'), targetGroupId: targetGroupId || undefined, assetTypeId, name: name.trim() || definition.label, symbol: symbol.trim() || definition.defaultSymbol, quantity: num(quantity || '0'), extraCostsSar: num(extraCosts || '0'), portfolioId: portfolioId || undefined, location: location || undefined, marketQuote: quote }
-  let preview: ReturnType<typeof previewSimplifiedPurchase> | null = null; try { preview = previewSimplifiedPurchase(state, input) } catch { preview = null }
-  const submit = async (e: FormEvent) => { e.preventDefault(); let finalQuote = quote; if (!finalQuote && symbol.trim() && !['none','manual_appraisal','contractual'].includes(definition.quoteStrategy)) finalQuote = await fetchMarketQuote({ assetTypeId, symbol, quoteStrategy: definition.quoteStrategy }); onSubmit({ ...input, marketQuote: finalQuote }) }
+  }, [assetTypeId, effectiveSymbol, definition.quoteStrategy])
+
+  const input: SimplifiedPurchaseInput = {
+    sourceHoldingId,
+    ownerId: SELF_ID,
+    amountPaid: num(amountPaid || '0'),
+    targetAssetId: targetMode === 'existing' ? targetAssetId || undefined : undefined,
+    targetGroupId: targetMode === 'new' ? targetGroupId || undefined : undefined,
+    assetTypeId,
+    name: effectiveName,
+    symbol: effectiveSymbol || undefined,
+    quantity: num(quantity || '0'),
+    extraCostsSar: num(extraCosts || '0'),
+    portfolioId: portfolioId || undefined,
+    location: targetMode === 'new' ? location || undefined : selectedTarget?.location,
+    marketQuote: quote,
+  }
+  let preview: ReturnType<typeof previewSimplifiedPurchase> | null = null
+  try { preview = previewSimplifiedPurchase(state, input) } catch { preview = null }
+  if (targetMode === 'existing' && !selectedTarget) preview = null
+
+  const reset = () => {
+    const initial = assetTypeById('gold')!
+    setSource(''); setAmount(''); setTargetMode('new'); setTargetAsset(''); setTargetGroup('')
+    setAssetType('gold'); setName(initial.label); setSymbol(initial.defaultSymbol ?? '')
+    setQuantity(''); setPortfolio(''); setLocation(''); setExtraCosts('0')
+    setQuote(null); setQuoteState('idle'); setResetKey(key => key + 1)
+  }
+
+  const submit = async (e: FormEvent) => {
+    e.preventDefault()
+    if (!preview || submitting) return
+    setSubmitting(true)
+    try {
+      let finalQuote = quote
+      if (!finalQuote && effectiveSymbol.trim() && !['none','manual_appraisal','contractual'].includes(definition.quoteStrategy)) {
+        finalQuote = await fetchMarketQuote({ assetTypeId, symbol: effectiveSymbol, quoteStrategy: definition.quoteStrategy })
+      }
+      const success = onSubmit({ ...input, marketQuote: finalQuote })
+      if (success) reset()
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
   if (!cashAssets.length) return <EmptyAction title="لا يوجد أصل نقدي صالح للدفع" text="أنشئ أصلًا نقديًا مثل «الراجحي الجاري» ثم سجل رصيده الافتتاحي."/>
-  return <FormShell title="شراء أصل" subtitle="الخصم يتم من أصل نقدي، والأصل المشترى يوضع مباشرة تحت مجموعة؛ لا توجد طبقة حساب حفظ."><form className="trade-form" onSubmit={submit}>
-    <Field label="أصل الدفع"><select value={sourceHoldingId} onChange={e => setSource(e.target.value)}><option value="">اختر الأصل النقدي</option>{cashAssets.map(h => <option key={h.id} value={h.id}>{h.name} — {ownerQuantity(h, SELF_ID).toLocaleString('ar-SA')} {h.nativeUnit}</option>)}</select></Field>
+  return <FormShell title="شراء أصل" subtitle="اختر مصدر الدفع من الشجرة، ثم أنشئ حيازة جديدة أو أضف Lot مستقلًا إلى حيازة موجودة."><form className="trade-form" onSubmit={submit}>
+    <GroupAssetCascader key={`pay-${resetKey}`} groups={groups ?? []} assets={state.holdings} value={sourceHoldingId} onChange={setSource} isEligible={sourceEligible} label="أصل الدفع" placeholder="اختر من الشجرة حتى الأصل النقدي"/>
     <div className="field-grid"><Field label="المبلغ المدفوع"><input value={amountPaid} onChange={e => setAmount(e.target.value)} inputMode="decimal"/></Field><Field label="المحفظة (اختياري)"><select value={portfolioId} onChange={e => setPortfolio(e.target.value)}><option value="">السيولة الحرة</option>{portfolios.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}</select></Field></div>
     <Field label="نوع الأصل"><select value={assetTypeId} onChange={e => setAssetType(e.target.value as AssetTypeId)}>{assetTypeCatalog.map(x => <option key={x.id} value={x.id}>{x.groupLabel} — {x.label}</option>)}</select></Field>
-    <div className="field-grid"><Field label="اسم الأصل"><input value={name} onChange={e => setName(e.target.value)}/></Field><Field label="الرمز"><input value={symbol} onChange={e => setSymbol(e.target.value.toUpperCase())}/></Field></div>
-    <div className="field-grid"><Field label={`الكمية (${definition.defaultUnit})`}><input value={quantity} onChange={e => setQuantity(e.target.value)} inputMode="decimal"/></Field><Field label="رسوم/تكاليف إضافية"><input value={extraCosts} onChange={e => setExtraCosts(e.target.value)} inputMode="decimal"/></Field></div>
-    <GroupCascader groups={groups ?? []} value={targetGroupId} onChange={setTargetGroup} label="تموضع الأصل"/>
-    <Field label="الموقع الجغرافي (اختياري)"><input value={location} onChange={e => setLocation(e.target.value)}/></Field>
-    <div className="purchase-summary"><Summary label="Cost Basis" value={preview ? `${money.format(preview.totalCostBasisSar)} ر.س` : '—'}/><Summary label="التكلفة / وحدة" value={preview ? `${money.format(preview.effectiveUnitCostSar)} ر.س` : '—'}/><Summary label="التقييم" value={quoteState === 'loading' ? 'جاري الجلب…' : quote ? `${money.format(quote.unitPriceSar)} ر.س` : 'من التكلفة مؤقتًا'}/></div>
-    <button className="primary wide" type="submit" disabled={!preview}>تأكيد الشراء</button>
+    <Field label="وجهة الشراء"><select value={targetMode} onChange={e => { const mode = e.target.value as PurchaseTargetMode; setTargetMode(mode); setTargetAsset(''); setTargetGroup(''); setQuote(null) }}><option value="new">إنشاء أصل / حيازة جديدة</option><option value="existing">زيادة أصل موجود وإعادة حساب متوسط التكلفة</option></select></Field>
+
+    {targetMode === 'existing' ? <>
+      <GroupAssetCascader key={`target-${assetTypeId}-${resetKey}`} groups={groups ?? []} assets={state.holdings} value={targetAssetId} onChange={setTargetAsset} isEligible={existingEligible} label="الأصل الموجود" placeholder="اختر الحيازة التي ستستقبل الدفعة"/>
+      {selectedTarget && <div className="purchase-summary"><Summary label="الحيازة الحالية" value={`${selectedTarget.quantity.toLocaleString('ar-SA')} ${selectedTarget.nativeUnit}`}/><Summary label="متوسط التكلفة الحالي" value={targetAverage == null ? 'غير معروف' : `${money.format(targetAverage)} ر.س`}/><Summary label="المجموعة" value={(groups ?? []).find(g => g.id === selectedTarget.groupId)?.name ?? 'بدون مجموعة'}/></div>}
+    </> : <>
+      <div className="field-grid"><Field label="اسم الأصل"><input value={name} onChange={e => setName(e.target.value)}/></Field><Field label="الرمز"><input value={symbol} onChange={e => setSymbol(e.target.value.toUpperCase())}/></Field></div>
+      <GroupCascader key={`group-${resetKey}`} groups={groups ?? []} value={targetGroupId} onChange={setTargetGroup} label="تموضع الأصل"/>
+      <details className="optional-details"><summary>تفاصيل إضافية</summary><Field label="الموقع الجغرافي"><input value={location} onChange={e => setLocation(e.target.value)}/></Field></details>
+    </>}
+
+    <div className="field-grid"><Field label={`كمية الدفعة (${selectedTarget?.nativeUnit ?? definition.defaultUnit})`}><input value={quantity} onChange={e => setQuantity(e.target.value)} inputMode="decimal"/></Field><Field label="رسوم/تكاليف إضافية"><input value={extraCosts} onChange={e => setExtraCosts(e.target.value)} inputMode="decimal"/></Field></div>
+    <div className="purchase-summary"><Summary label="Cost Basis للدفعة" value={preview ? `${money.format(preview.totalCostBasisSar)} ر.س` : '—'}/><Summary label="تكلفة الدفعة / وحدة" value={preview ? `${money.format(preview.effectiveUnitCostSar)} ر.س` : '—'}/><Summary label="التقييم" value={quoteState === 'loading' ? 'جاري الجلب…' : quote ? `${money.format(quote.unitPriceSar)} ر.س` : selectedTarget ? `${money.format(selectedTarget.marketPriceSar)} ر.س حاليًا` : 'من التكلفة مؤقتًا'}/></div>
+    <button className="primary wide" type="submit" disabled={!preview || submitting}>{submitting ? 'جاري التسجيل…' : targetMode === 'existing' ? 'تأكيد الشراء الإضافي' : 'تأكيد الشراء'}</button>
   </form></FormShell>
 }
 
@@ -140,4 +231,4 @@ function FormShell({ title, subtitle, children }: { title: string; subtitle: str
 function Field({ label, children }: { label: string; children: ReactNode }) { return <label><span>{label}</span>{children}</label> }
 function Summary({label,value}:{label:string;value:string}){return <div className="purchase-summary-item"><span>{label}</span><strong>{value}</strong></div>}
 function EmptyAction({title,text}:{title:string;text:string}){return <div className="panel empty-preview"><CirclePlus/><strong>{title}</strong><span>{text}</span></div>}
-function helpFor(action: ActionKey){return ({purchase:'الأصل النقدي يُخصم منه، والأصل المشترى يُنشأ مباشرة داخل المجموعة المختارة.',asset:'سجّل الأصل الموجود بأقل بيانات لازمة. البنك أو نوع الحساب خصائص للأصل النقدي وليسا حاوية مستقلة.',funds:'الرصيد الافتتاحي مرتبط بالأصل نفسه ويسجل مرة واحدة؛ الدخل حركة متكررة.',transfer:'النقل يحدث من أصل نقدي إلى أصل نقدي آخر بنفس العملة.',portfolio:'المحفظة غرض اقتصادي مستقل عن شجرة المجموعات.',allocate:'التخصيص يغير الغرض لا التموضع التنظيمي.'} as Record<ActionKey,string>)[action]}
+function helpFor(action: ActionKey){return ({purchase:'اختر أصل الدفع من الشجرة. يمكن للشراء إنشاء حيازة جديدة أو إضافة Lot مستقل إلى أصل موجود دون دمج تلقائي.',asset:'سجّل الأصل الموجود بأقل بيانات لازمة. البنك أو نوع الحساب خصائص للأصل النقدي وليسا حاوية مستقلة.',funds:'الرصيد الافتتاحي مرتبط بالأصل نفسه ويسجل مرة واحدة؛ الدخل حركة متكررة.',transfer:'النقل يحدث من أصل نقدي إلى أصل نقدي آخر بنفس العملة.',portfolio:'المحفظة غرض اقتصادي مستقل عن شجرة المجموعات.',allocate:'التخصيص يغير الغرض لا التموضع التنظيمي.'} as Record<ActionKey,string>)[action]}
