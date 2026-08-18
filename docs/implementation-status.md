@@ -23,6 +23,14 @@
 | Categories | 🔴 Pending | Expense/Income category trees pending |
 | AI Intake | 🔴 Pending | Draft extraction/matching/duplicate gate pending |
 
+## Invariant gate — added 2026-08-18
+
+`npm run test:invariants` enforces the approved specification directly. It is currently **RED (14/18)**: the behavioural suite passes while the financial core violates RULE-023, RULE-011, RULE-027, RULE-002/014, CALC-011, ADR-007 §5/§6, ADR-008 Invariant 7 and DEC-021.
+
+Full matrix and the meaning of each failure: `docs/spec/quality/invariant-gate.md`.
+
+Feature work on #34/#36/#37 should not resume while the affected invariant families are red.
+
 ## Foundation tests implemented
 
 - Account digital-twin total.

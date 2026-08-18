@@ -110,6 +110,8 @@ A feature PR is not complete unless:
 - relevant specs were updated;
 - implementation matches the approved statuses;
 - tests cover the financial invariants;
+- `npm run test:invariants` was run and no `INV-xxx` regressed;
+- a failing `INV-xxx` was never "fixed" by editing the invariant — only by fixing the model or by an approved ADR that changes the rule;
 - mobile and desktop behavior were checked;
 - no `TBD` was silently resolved by code;
 - CI passes;

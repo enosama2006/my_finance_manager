@@ -1,3 +1,4 @@
+/// <reference types="vitest/config" />
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 
@@ -11,5 +12,10 @@ export default defineConfig({
         changeOrigin: false,
       },
     },
+  },
+  test: {
+    // The invariant gate is a separate signal from the prototype's behavioural tests.
+    // It runs via `npm run test:invariants`. See docs/spec/quality/invariant-gate.md
+    exclude: ['**/node_modules/**', '**/dist/**', 'tests/invariants/**'],
   },
 })

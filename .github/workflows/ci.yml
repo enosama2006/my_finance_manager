@@ -24,5 +24,8 @@ jobs:
       - name: Domain tests
         run: npm test
 
+      - name: Invariant gate
+        run: npm run test:invariants
+
       - name: Production build
         run: npm run build

@@ -103,6 +103,7 @@ Scenarios are not merely examples. They are used to pressure-test the model. Eac
 
 ### Quality and decisions
 - `quality/traceability-and-acceptance.md` — requirement → screen → action → entity → test traceability.
+- `quality/invariant-gate.md` — executable invariants (`INV-xxx`) that enforce approved RULE/CALC/ADR authority; survives the rebuild and is the acceptance contract for it.
 - `decisions/decision-log.md` — accepted product/architecture decisions.
 - `decisions/ADR-TEMPLATE.md` — decision-record template.
 - `VIBE_CODING_GUIDE.md` — mandatory instructions for AI coding sessions.

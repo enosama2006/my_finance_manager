@@ -12,7 +12,8 @@
     "dev:api": "node server/api.mjs",
     "build": "tsc -b && vite build",
     "preview": "vite preview --host 0.0.0.0",
-    "test": "vitest run && node --test server/database.node-test.mjs"
+    "test": "vitest run && node --test server/database.node-test.mjs",
+    "test:invariants": "vitest run -c vitest.invariants.config.ts"
   },
   "dependencies": {
     "@vitejs/plugin-react": "latest",
