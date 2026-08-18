@@ -1,4 +1,4 @@
-import { ownerQuantity, ownerWeightedAverageCostSar, round2 } from '../domain/finance'
+import { ownerQuantity, ownerWeightedAverageCostSar, resizeCostBasisLot, round2 } from '../domain/finance'
 import type { FinanceState, Holding, LedgerTransaction, TransactionRevision } from '../domain/types'
 import { voidAssetPurchase } from './assetPurchaseCorrections'
 import { voidOpeningBalance } from './openingBalances'
@@ -7,10 +7,25 @@ const id = (p: string) => `${p}-${crypto.randomUUID()}`
 const now = () => new Date().toISOString()
 function snapshot(tx: LedgerTransaction): TransactionRevision['snapshot'] { return { at: tx.at, title: tx.title, amountSar: tx.amountSar, ownerId: tx.ownerId, sourceHoldingId: tx.sourceHoldingId, targetHoldingId: tx.targetHoldingId, sourceQuantity: tx.sourceQuantity, targetQuantity: tx.targetQuantity, exchangeRate: tx.exchangeRate, feesSar: tx.feesSar, realizedGainLossSar: tx.realizedGainLossSar, note: tx.note, portfolioId: tx.portfolioId, expenseCategoryId: tx.expenseCategoryId, expenseNecessity: tx.expenseNecessity, expenseBeneficiaryId: tx.expenseBeneficiaryId, userInput: tx.userInput } }
 function asset(state: FinanceState, assetId?: string) { const a = assetId ? state.holdings.find(h => h.id === assetId && !h.archived) : undefined; if (!a) throw new Error('الأصل المرتبط بالحركة غير موجود'); return a }
-function add(h: Holding, ownerId: string, q: number, unitCost?: number): Holding { const cost = unitCost ?? ownerWeightedAverageCostSar(h, ownerId) ?? h.marketPriceSar; const own = h.ownership.some(x => x.ownerId === ownerId) ? h.ownership.map(x => x.ownerId === ownerId ? { ...x, quantity: round2(x.quantity + q) } : x) : [...h.ownership, { ownerId, quantity: q }]; return { ...h, quantity: round2(h.quantity + q), ownership: own, costLots: [...h.costLots, { id: id('lot'), ownerId, quantity: q, unitCostSar: cost, acquiredAt: now() }] } }
-function remove(h: Holding, ownerId: string, q: number): Holding { if (q > ownerQuantity(h, ownerId) + 1e-9) throw new Error('لا يمكن عكس الحركة لأن كمية الأصل تغيرت لاحقًا'); let rem = q; const lots = h.costLots.map(l => { if (l.ownerId !== ownerId || rem <= 1e-9) return l; const use = Math.min(l.quantity, rem); rem = round2(rem - use); return { ...l, quantity: round2(l.quantity - use) } }).filter(l => l.quantity > 1e-9); if (rem > 1e-9) throw new Error('تعذر عكس Cost Basis'); return { ...h, quantity: round2(h.quantity - q), ownership: h.ownership.map(x => x.ownerId === ownerId ? { ...x, quantity: round2(x.quantity - q) } : x).filter(x => x.quantity > 1e-9), costLots: lots } }
+function add(h: Holding, ownerId: string, q: number, unitCost?: number, preserveUnknown = false): Holding {
+  const cost = unitCost ?? (preserveUnknown ? undefined : ownerWeightedAverageCostSar(h, ownerId) ?? h.marketPriceSar)
+  const own = h.ownership.some(x => x.ownerId === ownerId) ? h.ownership.map(x => x.ownerId === ownerId ? { ...x, quantity: round2(x.quantity + q) } : x) : [...h.ownership, { ownerId, quantity: q }]
+  return { ...h, quantity: round2(h.quantity + q), ownership: own, costLots: [...h.costLots, { id: id('lot'), ownerId, quantity: q, unitCostSar: cost, totalCostBasisSar: cost == null ? undefined : q * cost, acquiredAt: now() }] }
+}
+function remove(h: Holding, ownerId: string, q: number): Holding {
+  if (q > ownerQuantity(h, ownerId) + 1e-9) throw new Error('لا يمكن عكس الحركة لأن كمية الأصل تغيرت لاحقًا')
+  let rem = q
+  const lots = h.costLots.map(l => {
+    if (l.ownerId !== ownerId || rem <= 1e-9) return l
+    const use = Math.min(l.quantity, rem)
+    rem = round2(rem - use)
+    return resizeCostBasisLot(l, round2(l.quantity - use))
+  }).filter(l => l.quantity > 1e-9)
+  if (rem > 1e-9) throw new Error('تعذر عكس Cost Basis')
+  return { ...h, quantity: round2(h.quantity - q), ownership: h.ownership.map(x => x.ownerId === ownerId ? { ...x, quantity: round2(x.quantity - q) } : x).filter(x => x.quantity > 1e-9), costLots: lots }
+}
 function mark(state: FinanceState, tx: LedgerTransaction, reason: string, holdings: Holding[], portfolioSlices = state.portfolioSlices): FinanceState { const revision = { version: tx.version, changedAt: now(), reason, snapshot: snapshot(tx) }; const voided = { ...tx, status: 'voided' as const, version: tx.version + 1, revisions: [...tx.revisions, revision], note: `ملغاة: ${reason}` }; return { ...state, schemaVersion: 5, holdings, portfolioSlices, ledger: state.ledger.map(x => x.id === tx.id ? voided : x) } }
-function ownerBasis(h: Holding, ownerId: string) { return h.costLots.filter(l => l.ownerId === ownerId).reduce((sum, l) => sum + l.quantity * (l.unitCostSar ?? 0), 0) }
+function ownerBasis(h: Holding, ownerId: string) { return h.costLots.filter(l => l.ownerId === ownerId).reduce((sum, l) => sum + (l.totalCostBasisSar ?? l.quantity * (l.unitCostSar ?? 0)), 0) }
 
 function restorePortfolioSlice(state: FinanceState, slices: FinanceState['portfolioSlices'], portfolioId: string, holdingId: string, ownerId: string, quantity: number) {
   const existing = slices.find(s => s.portfolioId === portfolioId && s.holdingId === holdingId && s.ownerId === ownerId)
@@ -92,8 +107,9 @@ export function voidTransaction(state: FinanceState, transactionId: string, reas
     const source = asset(state, tx.sourceHoldingId)
     const target = asset(state, tx.targetHoldingId)
     const targetNext = remove(target, tx.ownerId, tx.targetQuantity)
-    const unit = tx.sourceQuantity > 0 ? tx.amountSar / tx.sourceQuantity : source.marketPriceSar
-    const sourceNext = add(source, tx.ownerId, tx.sourceQuantity, unit)
+    const basisKnown = tx.costBasisSar != null
+    const unit = basisKnown && tx.sourceQuantity > 0 ? tx.costBasisSar! / tx.sourceQuantity : undefined
+    const sourceNext = add(source, tx.ownerId, tx.sourceQuantity, unit, !basisKnown)
     return mark(state, tx, why, state.holdings.map(h => h.id === source.id ? sourceNext : h.id === target.id ? targetNext : h))
   }
   if (tx.kind === 'reconciliation') {

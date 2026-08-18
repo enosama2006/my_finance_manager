@@ -107,21 +107,81 @@ export function addIncomeToAsset(state: FinanceState, input: AddAssetIncomeInput
   return { ...state, schemaVersion: 5, holdings: state.holdings.map(h => h.id === asset.id ? updated : h), ledger: [tx, ...state.ledger] }
 }
 
-export interface TransferBetweenAssetsInput { sourceAssetId: string; targetAssetId: string; ownerId: string; quantity: number; note?: string }
+export interface TransferBetweenAssetsInput {
+  sourceAssetId: string
+  targetAssetId: string
+  ownerId: string
+  /** Quantity deducted from the source cash Asset. */
+  quantity: number
+  /** Required for cross-currency transfer when exchangeRate is not supplied. */
+  targetQuantity?: number
+  /** Source-currency units per one target-currency unit. Example: 3.75 SAR per 1 USD. */
+  exchangeRate?: number
+  note?: string
+}
+
 export function transferBetweenAssets(state: FinanceState, input: TransferBetweenAssetsInput): FinanceState {
-  if (!Number.isFinite(input.quantity) || input.quantity <= 0) throw new Error('المبلغ يجب أن يكون أكبر من صفر')
+  if (!Number.isFinite(input.quantity) || input.quantity <= 0) throw new Error('المبلغ المصدر يجب أن يكون أكبر من صفر')
   if (input.sourceAssetId === input.targetAssetId) throw new Error('اختر أصلين مختلفين')
   const source = activeAsset(state, input.sourceAssetId); const target = activeAsset(state, input.targetAssetId)
   if (source.kind !== 'cash' || target.kind !== 'cash') throw new Error('النقل النقدي يتطلب أصلين نقديين')
-  if (source.symbol.toUpperCase() !== target.symbol.toUpperCase()) throw new Error('النقل المباشر يتطلب نفس العملة؛ استخدم التحويل لتغيير العملة')
+  ownerExists(state, input.ownerId)
+
   const sourceOwned = ownerQuantity(source, input.ownerId)
   if (input.quantity > sourceOwned + 1e-9) throw new Error('الرصيد غير كافٍ')
+
+  const sameCurrency = source.symbol.toUpperCase() === target.symbol.toUpperCase()
+  let targetQuantity: number
+  let exchangeRate: number
+
+  if (sameCurrency) {
+    targetQuantity = round2(input.quantity)
+    exchangeRate = 1
+  } else {
+    const hasTarget = input.targetQuantity != null && Number.isFinite(input.targetQuantity) && input.targetQuantity > 0
+    const hasRate = input.exchangeRate != null && Number.isFinite(input.exchangeRate) && input.exchangeRate > 0
+    if (!hasTarget && !hasRate) throw new Error('عند اختلاف العملة أدخل المبلغ المستلم أو سعر التحويل')
+
+    if (hasTarget) {
+      targetQuantity = round2(input.targetQuantity!)
+      exchangeRate = input.quantity / targetQuantity
+      if (hasRate) {
+        const expectedTarget = round2(input.quantity / input.exchangeRate!)
+        if (Math.abs(expectedTarget - targetQuantity) > 0.01) throw new Error('المبلغ المستلم وسعر التحويل غير متطابقين')
+        exchangeRate = input.exchangeRate!
+      }
+    } else {
+      exchangeRate = input.exchangeRate!
+      targetQuantity = round2(input.quantity / exchangeRate)
+    }
+    if (targetQuantity <= 0) throw new Error('المبلغ المستلم يجب أن يكون أكبر من صفر')
+  }
+
   const sourceCost = ownerWeightedAverageCostSar(source, input.ownerId)
   const knownSourceCost = sourceCost ?? undefined
   const transferredBasis = sourceCost == null ? undefined : input.quantity * sourceCost
   const nextSource = setOwnerQuantity(source, input.ownerId, round2(sourceOwned - input.quantity), knownSourceCost)
   const targetOwned = ownerQuantity(target, input.ownerId)
-  const nextTarget = setOwnerQuantity(target, input.ownerId, round2(targetOwned + input.quantity), knownSourceCost, transferredBasis)
-  const tx: LedgerTransaction = { id: id('tx'), version: 1, status: 'posted', revisions: [], at: now(), kind: 'real_transfer', title: `نقل ${source.symbol}: ${source.name} ← ${target.name}`, amountSar: round2(input.quantity * source.marketPriceSar), costBasisSar: transferredBasis ?? null, ownerId: input.ownerId, sourceHoldingId: source.id, targetHoldingId: target.id, sourceQuantity: round2(input.quantity), targetQuantity: round2(input.quantity), note: input.note?.trim() || (transferredBasis == null ? 'نقل بين أصلين نقديين بنفس العملة؛ التكلفة التاريخية للمصدر غير معروفة فبقيت غير معروفة.' : 'نقل بين أصلين نقديين بنفس العملة؛ لا يحقق ربحًا أو خسارة.') }
+  const targetUnitBasis = transferredBasis == null ? undefined : transferredBasis / targetQuantity
+  const nextTarget = setOwnerQuantity(target, input.ownerId, round2(targetOwned + targetQuantity), targetUnitBasis, transferredBasis)
+  const reportingValueSar = round2(input.quantity * source.marketPriceSar)
+  const realized = sameCurrency || transferredBasis == null ? null : round2(reportingValueSar - transferredBasis)
+
+  const tx: LedgerTransaction = {
+    id: id('tx'), version: 1, status: 'posted', revisions: [], at: now(), kind: 'real_transfer',
+    title: sameCurrency ? `نقل ${source.symbol}: ${source.name} ← ${target.name}` : `نقل وتحويل ${source.symbol} → ${target.symbol}: ${source.name} ← ${target.name}`,
+    amountSar: reportingValueSar,
+    costBasisSar: transferredBasis ?? null,
+    ownerId: input.ownerId,
+    sourceHoldingId: source.id,
+    targetHoldingId: target.id,
+    sourceQuantity: round2(input.quantity),
+    targetQuantity,
+    exchangeRate,
+    realizedGainLossSar: realized,
+    note: input.note?.trim() || (sameCurrency
+      ? (transferredBasis == null ? 'نقل بين أصلين نقديين بنفس العملة؛ التكلفة التاريخية للمصدر غير معروفة فبقيت غير معروفة.' : 'نقل بين أصلين نقديين بنفس العملة؛ لا يغير Cost Basis الإجمالية.')
+      : `FX Transfer بسعر ${exchangeRate} ${source.symbol}/${target.symbol}. المبلغ المصدر ${round2(input.quantity)} ${source.symbol} والمستلم ${targetQuantity} ${target.symbol}.`),
+  }
   return { ...state, schemaVersion: 5, holdings: state.holdings.map(h => h.id === source.id ? nextSource : h.id === target.id ? nextTarget : h), ledger: [tx, ...state.ledger] }
 }

@@ -11,6 +11,7 @@ For the current cross-scenario reconciliation and simulation, read:
 - ADR-004 — Group -> Asset structural baseline
 - ADR-005 — Instrument identity / Asset instances / lots / investment flows refinement
 - ADR-006 — Tree-first UX / unified Parties / leaf actions / Modal-Sheet / form lifecycle
+- ADR-007 — File-backed SQLite persistence / explicit migration / cash FX transfers
 
 ## Scenario inventory
 
@@ -23,7 +24,7 @@ For the current cross-scenario reconciliation and simulation, read:
 | SCN-005 | Savings backing & maturity ladder | Facts valid; backing policy remains Draft refinement |
 | SCN-006 | Entrusted crypto-to-cash settlement | Facts valid; SettlementMandate/encumbrance not fully implemented |
 | SCN-007 | Cost flow / acquisition chain | Facts valid; AcquisitionChain persistence Draft |
-| SCN-008 | Valuation role & performance recognition | Facts valid; historical FX basis refinement tracked #38 |
+| SCN-008 | Valuation role & performance recognition | Facts valid; historical FX basis refinement implemented via #38 |
 | SCN-009 | Portfolio lifecycle / CapitalCycle / Position | Facts valid; lifecycle implementation partial |
 | SCN-010 | Expense tree & Portfolio consumption | Facts valid; leaf-only category posting refined by ADR-006 |
 | SCN-011 | Place-first Account purchase/export | **Place/Account architecture Superseded**; purchase/export facts retained |
@@ -31,14 +32,15 @@ For the current cross-scenario reconciliation and simulation, read:
 | SCN-013 | User Account Groups | **Group->Account->Holding Superseded** by Group->Asset |
 | SCN-014 | Audited transaction correction | Approved invariant; financial replay coverage expanded in schema-v5 |
 | SCN-015 | Opening state correction/void | Approved; key is Asset+Owner, FX historical basis may be unknown |
-| SCN-016 | Correctable asset purchase | Approved direction; repeated-purchase lot refinement pending #36 |
+| SCN-016 | Correctable asset purchase | Approved; repeated-purchase Lots implemented via #36 |
 | SCN-017 | Ledger cleanup visibility | Draft/Open UX debt; voided audit remains persisted |
 | SCN-018 | User correction principle | Approved product invariant; complex replay coverage staged |
-| SCN-019 | Native/reporting currency | Valid after separating current FX valuation from historical basis |
+| SCN-019 | Native/reporting currency | Valid after separating current FX valuation from historical basis; cross-currency account movement refined by ADR-007 |
 | SCN-020 | Account Cascader | **Account terminal Superseded** by Group->eligible Asset cascader #33 |
 | SCN-021 | Group->Asset & full correction | Current Approved structural baseline; refined by ADR-005 |
-| SCN-022 | Real investment account, funds, distributions & DCA | Real snapshot validation; Draft target refinements #34/#36/#37/#38 |
+| SCN-022 | Real investment account, funds, distributions & DCA | Real snapshot validation; DCA/basis fixed; catalog/distributions remain #34/#37 |
 | SCN-023 | Tree-first Parties, Portfolios, leaf actions & form lifecycle | Approved product direction; implementation tracked #40-#44 |
+| SCN-024 | File SQLite cut-over & cross-currency cash transfer | Approved target; #52/#53 implementation and real-use verification |
 
 ## Rule for future scenarios
 
