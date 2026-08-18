@@ -5,22 +5,55 @@ Status: **Approved core concepts / evolving target model**
 This document defines financial meaning independent of React, database engine or API framework.
 
 Authoritative structural baseline: ADR-004.
-Draft refinement under real-use validation: ADR-005.
+Draft investment/instrument refinement: ADR-005.
+Approved cross-platform hierarchy/Party/interaction direction: ADR-006.
 
 ## 1. Core entities
 
 ### ENT-001 Party
-A person or organization participating in ownership, custody, beneficiary or financial relationships.
+Canonical identity for a real person or economic/legal group participating in MyFinMan relationships.
 
 Examples:
 - self/user;
-- family owner;
-- beneficiary;
-- bank/broker/institution;
-- custodian;
+- another person;
+- family/household;
+- people-group;
+- company/organization;
+- bank/broker/institution when acting as provider/custodian/counterparty;
 - debtor/creditor/counterparty.
 
+**Owner and Beneficiary are roles over Party, not separate identity stores.**
+
+The same Party may be referenced as:
+- Owner;
+- Beneficiary;
+- Custodian/provider;
+- Creditor;
+- Debtor;
+- Counterparty;
+- mandate principal/recipient;
+- another future relationship role.
+
 A Party role does not automatically imply ownership.
+
+#### Party hierarchy/navigation
+
+ADR-006 requires one hierarchical Party-management experience rather than separate flat Owner and Beneficiary lists.
+
+Structural navigation containers may organize Party leaves, for example:
+
+```text
+الأطراف
+├── الأسرة والأصدقاء       [container]
+│   ├── أنا                [Party]
+│   └── مراد               [Party]
+└── الشركات                [container]
+    └── شركة عائلية        [Party]
+```
+
+A family/company/group may itself be a real actionable Party. Membership such as `مراد عضو في العائلة` is a relationship concept and must not be confused with navigational containment merely to force the Party into a branch.
+
+Exact persistence for Party navigation containers/membership remains implementation design work under #41. Stable Party identity and no duplicate person records are mandatory.
 
 ### ENT-010 Account — Deprecated target concept / legacy compatibility
 Historical schema-v4 stable identity for a real account/wallet/vault/broker account.
@@ -94,6 +127,8 @@ Group MUST NOT have:
 
 A Group may visually mirror a real institution/account context, but Group placement alone is not authoritative custody or ownership truth. Reorganization is metadata-only unless a separate real transaction/custody event is posted.
 
+ADR-006 interaction rule: Group branches are navigation/organization nodes; financial operations selecting an Asset resolve to an eligible Asset leaf, not to Group itself.
+
 ### ENT-030 Asset — Approved quantity-bearing user financial truth
 Historically called `Holding` in schema/prototype code. Target user-facing name is Asset.
 
@@ -127,7 +162,7 @@ Derived Gold total = 200g
 The derived total is not stored as a third Asset.
 
 ### ENT-031 OwnershipShare
-How much of an Asset belongs economically to one Owner.
+How much of an Asset belongs economically to one Owner Party.
 
 Invariant: total OwnershipShare native quantity equals Asset native quantity unless an explicitly approved temporary-unassigned state exists; current rule does not.
 
@@ -156,7 +191,7 @@ Answers: **why is value reserved/managed this way?**
 Portfolio is not a bank account, broker account, Group or Asset.
 
 It may:
-- have parent/children;
+- have parent/children through stable hierarchy;
 - have one/multiple owners according to policy;
 - have beneficiary/purpose/profile/target;
 - span multiple Groups, providers and Asset types;
@@ -164,8 +199,18 @@ It may:
 
 Portfolio is optional. Financial truth remains valid without assigning an Asset to a Portfolio.
 
+#### Portfolio branch/leaf behavior
+
+Under ADR-006:
+
+- parent/branch Portfolios organize and roll up descendants;
+- Portfolio allocations and financial-purpose operations target an eligible Portfolio leaf by default;
+- parent totals are derived and must not duplicate child allocated quantities;
+- rename/reparent/archive of Portfolio hierarchy is purpose metadata and creates no physical Asset movement or Ledger event;
+- hierarchy must reject cycles.
+
 ### ENT-041 PortfolioAllocation / PortfolioSlice
-A native quantity from one Owner's share of one Asset assigned to one Portfolio.
+A native quantity from one Owner's share of one Asset assigned to one actionable Portfolio.
 
 Current prototype name may remain `PortfolioSlice`.
 
@@ -249,6 +294,14 @@ Income/expense classification tree.
 
 Category is independent from Portfolio, Asset Type, Owner and Beneficiary.
 
+Under ADR-006:
+- branch Categories organize and roll up descendants;
+- expense posting targets an actionable leaf Category by default;
+- category hierarchy rejects cycles;
+- parent reports aggregate descendants without storing duplicate transaction amounts.
+
+Historical SCN-010 behavior that allowed posting to arbitrary parent Categories is superseded as the default interaction rule.
+
 ### ENT-130 Position — Approved concept / evolving implementation
 Optional performance/lifecycle scope for an exposure.
 
@@ -290,6 +343,7 @@ erDiagram
 ```
 
 Legacy Account relations are intentionally omitted from the target relationship map.
+Party navigation-container and Party membership persistence are intentionally not frozen in this ERD yet; ADR-006/#41 define their required semantics while implementation schema remains TBD.
 
 ---
 
@@ -300,7 +354,8 @@ Legacy Account relations are intentionally omitted from the target relationship 
 | What instrument is this? | InstrumentDefinition |
 | What concrete quantity/value do I hold? | Asset |
 | Where did I organize it in MyFinMan? | Group |
-| Whose wealth is it? | OwnershipShare / Party |
+| Whose wealth is it? | OwnershipShare / Party role=Owner |
+| Who benefited? | Party role=Beneficiary |
 | Who/provider physically controls it? | Asset custody/provider metadata / Party |
 | Where is it physically? | Asset location metadata |
 | Why is it reserved/managed? | Portfolio / PortfolioAllocation |
@@ -374,7 +429,7 @@ Renaming Groups, Assets, Portfolios or Parties does not replace stable IDs or hi
 Group never owns balance, Cost Basis, P/L or Ledger. Its roll-up is derived.
 
 ### RULE-020 — Asset never contains Asset
-All user hierarchy is Group -> Group/Asset.
+All user wealth hierarchy is Group -> Group/Asset.
 
 ### RULE-021 — InstrumentDefinition is reference-only
 InstrumentDefinition may aggregate/identify Assets but never stores user's wealth.
@@ -394,13 +449,46 @@ Portfolio is WHY. A broker/bank context may be represented by Group organization
 ### RULE-026 — Investment distribution linkage
 A cash distribution received from an investment Asset increases the destination Cash Asset and remains linked to the source investment for performance. Ordinary cash distribution does not reduce units unless the actual product event says otherwise.
 
+### RULE-027 — Owner and Beneficiary share canonical Party identity
+Owner and Beneficiary are roles over Party. The same human/family/company/group must not require duplicate identity records merely because it appears in different roles.
+
+### RULE-028 — Tree branches organize; operations target eligible leaves
+When a domain is represented as a hierarchy, branch/container nodes provide navigation/roll-up. Real financial/classification selection resolves to an eligible actionable leaf by default. Domain-specific exceptions must be explicit, not accidental flat-list behavior.
+
+### RULE-029 — Hierarchy reparenting is not a financial event
+Reparenting Group, Portfolio, Category or Party navigation placement preserves stable entity identity and does not create a financial Transaction unless a separate real-world event also occurred.
+
 ---
 
-## 5. Areas still Draft/TBD
+## 5. Cross-platform interaction contract (ADR-006)
+
+Although presentation logic is outside the pure financial domain, these behaviors are product invariants because they prevent repeated financial-entry errors.
+
+### Contextual CRUD
+- tree/list add/edit/reparent opens in contextual Modal/Sheet by default when a dedicated full workflow page is not semantically required;
+- preserve current path/tree position;
+- create must not inherit stale edit state.
+
+### Form lifecycle
+On successful create/post:
+- success feedback/Toast;
+- clear transient input and operation-specific derived state;
+- restore intentional fresh defaults;
+- prevent duplicate submission.
+
+On validation/execution failure:
+- preserve user input so the error can be corrected.
+
+Financial edit still follows RULE-016; Modal/Sheet is not permission to mutate projected financial truth directly.
+
+---
+
+## 6. Areas still Draft/TBD
 
 - Exact normalized TransactionLeg accounting schema.
 - InstrumentDefinition/provider catalog implementation and identifiers.
 - Exact custody/provider metadata normalization if Group names are insufficient for reporting.
+- Party navigation-container persistence and Party membership schema (#41).
 - Full cross-owner clearing/settlement algorithm.
 - SettlementMandate/encumbrance implementation.
 - AcquisitionChain/CostFlow normalized persistence.

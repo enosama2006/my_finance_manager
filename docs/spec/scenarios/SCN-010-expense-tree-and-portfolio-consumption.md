@@ -1,144 +1,167 @@
 # SCN-010 — Expense Tree and Portfolio Consumption
 
-Status: **Draft scenario / Implemented Prototype pressure-test**
+Status: **Scenario facts retained / architecture refined by ADR-004, ADR-006**
 
 ## User intent
 
-The user wants to start MyFinMan with no demo financial data and build the financial twin himself: institutions, accounts, balances, assets, Portfolios, expense categories, and transactions.
+The user wants to start MyFinMan with no demo financial data and build the financial twin himself: Groups, Assets, Portfolios, Parties, expense categories and transactions.
 
-He also wants expense categories managed as a hierarchy and every expense to optionally consume a Portfolio balance.
+Expense categories are hierarchical and every expense may optionally consume a Portfolio allocation.
 
 ## Scenario A — clean onboarding
 
 Initial state:
 
 - system identity `أنا` only;
-- no banks/institutions;
-- no Accounts;
-- no Holdings/balances;
+- no financial Groups except any intentionally empty organizational roots;
+- no Assets/balances;
 - no Portfolios;
 - no expense categories;
 - no Ledger transactions.
 
-User sequence:
+Example user sequence:
 
-1. Add `مصرف الراجحي` as Bank Party.
-2. Add `جاري الراجحي` Account.
-3. Add opening SAR cash balance.
-4. Add an Investment or Monthly Expenses Portfolio.
+1. Create Group `البنوك` and child Group `مصرف الراجحي` if desired for organization/provider context.
+2. Create Cash Asset `الراجحي الجاري` with native currency SAR.
+3. Add opening SAR quantity to that Asset.
+4. Create an Investment or Monthly Expenses Portfolio if needed.
 5. Add expense taxonomy.
-6. Add Assets or execute purchases.
+6. Add other Assets or execute purchases.
 
 Expected:
 
 - no hidden seed wealth exists;
-- opening balances are not classified as income;
-- Demo/Scenario data is loaded only by explicit user action and is isolated from the default experience.
+- opening balances are not classified as Income;
+- Groups themselves never carry wealth;
+- Demo/Scenario data is loaded only by explicit user action and is isolated from default experience.
 
 ## Scenario B — hierarchical expense classification
 
 User creates:
 
 ```text
-السكن
-└── الخدمات
-    ├── الكهرباء
-    ├── الماء
-    └── الإنترنت
+السكن                    [branch]
+└── الخدمات              [branch]
+    ├── الكهرباء         [leaf]
+    ├── الماء            [leaf]
+    └── الإنترنت         [leaf]
 
-السيارة
-├── الوقود
-└── الصيانة
+السيارة                  [branch]
+├── الوقود               [leaf]
+└── الصيانة              [leaf]
 ```
 
-Expected:
+Expected under ADR-006:
 
-- any leaf or parent can classify an expense;
-- rename/reparent preserves historical identity;
+- posting defaults to an actionable leaf category;
+- branch categories organize and roll up descendants;
+- branch nodes are not silently submitted as a final category;
+- rename/reparent preserves stable historical identity;
 - archive prevents future selection but preserves previous reports;
-- `السكن` rollup includes Electricity/Water/Internet descendants.
+- `السكن` rollup includes Electricity/Water/Internet descendants;
+- category hierarchy rejects cycles.
+
+Historical note: older wording allowed direct posting to any parent category. ADR-006 supersedes that default because the platform now treats branches as organizational containers and operations as leaf-targeted.
 
 ## Scenario C — expense without Portfolio
 
 Given:
 
-- Al Rajhi SAR Holding = 20,000 SAR;
+- Al Rajhi SAR Cash Asset = 20,000 SAR;
 - 5,000 SAR is allocated to unrelated protected Portfolios;
 - 15,000 SAR is Free Liquidity.
 
 User records:
 
 - 1,000 SAR Electricity expense;
-- source = Al Rajhi;
-- category = Housing ← Utilities ← Electricity;
+- payment source = Al Rajhi SAR Cash Asset;
+- category = Housing -> Utilities -> Electricity leaf;
 - Portfolio = none.
 
 Expected:
 
-- Al Rajhi SAR becomes 19,000;
+- Al Rajhi SAR Cash Asset becomes 19,000;
 - Free Liquidity decreases by 1,000;
 - no Portfolio allocation changes;
-- Ledger records Expense + category id;
-- parent Housing totals include the 1,000.
+- Ledger records Expense + category leaf id;
+- parent Housing/Utilities totals include the 1,000 through derived roll-up.
 
-A 16,000 SAR unlinked expense must be rejected because it would invade protected allocations.
+A 16,000 SAR unlinked expense must be rejected if it would invade protected Portfolio allocations.
 
-## Scenario D — expense linked to same-source Portfolio
+## Scenario D — expense linked to a Portfolio
 
 Given:
 
-- School Portfolio has 40,000 SAR allocated from Alinma;
-- Alinma is selected as physical source.
+- School Portfolio leaf has 40,000 SAR allocated;
+- Alinma SAR Cash Asset is selected as physical source.
 
-User records 5,000 SAR school expense linked to School Portfolio.
+User records 5,000 SAR school expense linked to the School Portfolio leaf.
 
 Expected:
 
-- Alinma Holding decreases by 5,000 physically;
+- Alinma Cash Asset decreases by 5,000 physically;
 - School Portfolio economic allocation decreases from 40,000 to 35,000;
 - other Portfolio allocations are untouched;
-- Ledger links both ExpenseCategory and Portfolio.
+- Ledger links ExpenseCategory leaf and Portfolio leaf;
+- parent Portfolio branches roll up the child result without storing duplicate capital.
 
 ## Scenario E — physical source differs from Portfolio backing
 
 Given:
 
-- Rent Portfolio is economically backed by 5,000 SAR cash + Gold value;
-- user has enough Free SAR in Alinma;
-- user pays 10,000 SAR from Alinma and links the expense to Rent Portfolio.
+- Rent Portfolio is economically backed by cash and/or Gold value according to approved allocation/backing policy;
+- user has enough eligible Free SAR in Alinma;
+- user pays 10,000 SAR from Alinma Cash Asset and links the expense to Rent Portfolio leaf.
 
 Expected:
 
-- Alinma cash decreases by 10,000 because that is WHERE the payment happened;
-- Rent Portfolio allocated economic value decreases by 10,000 because that is WHY the value was reserved;
-- Gold Holding quantity does not decrease unless there was an actual gold sale;
-- released Gold allocation becomes available for another purpose after Portfolio consumption;
-- no fake transfer or fake gold disposal is created.
+- Alinma Cash Asset decreases by 10,000 because that is WHERE the payment happened;
+- Rent Portfolio economic allocation decreases by 10,000 because that is WHY value was reserved;
+- Gold Asset quantity does not decrease unless there was an actual Gold sale/conversion;
+- released Gold allocation may become available for another purpose after Portfolio consumption according to policy;
+- no fake transfer or fake Gold disposal is created.
 
 ## Architecture pressure-test
 
-This scenario confirms the need for independent dimensions:
+This scenario confirms independent dimensions:
 
 ```text
 Expense Event
-├── Owner
-├── Physical Source Holding / Account
-├── Expense Category
-└── optional Portfolio
+├── Owner Party
+├── Payment Asset
+├── Expense Category leaf
+├── optional Beneficiary Party
+└── optional Portfolio leaf
 ```
 
-It also confirms ADR-002: physical payment may come from any eligible free/same-Portfolio source while Portfolio allocation represents economic purpose rather than bank location.
+It also confirms:
+
+- ADR-002: purpose allocation is independent from payment location/provider;
+- ADR-004: financial source is Asset, not mandatory Account/Holding hierarchy;
+- ADR-006: hierarchical selectors navigate branch -> eligible leaf.
+
+## Interaction contract
+
+Expense category and Portfolio selection should use tree/cascader interaction rather than flat lists when hierarchy exists.
+
+Tree CRUD uses contextual Modal/Sheet where appropriate. Successful posting follows the platform form lifecycle:
+
+- Success => Toast + reset transient form fields;
+- Failure => preserve entered values;
+- prevent duplicate submission.
 
 ## Acceptance tests
 
-1. Empty state contains no financial/demo data.
-2. User can add a Bank Party from empty state.
+1. Empty state contains no hidden financial/demo wealth.
+2. Cash Asset can be created directly under optional Groups.
 3. Category tree rejects cycles.
-4. Unlinked expense reduces free cash and does not alter Portfolio allocations.
-5. Linked expense reduces both physical source and selected Portfolio allocation.
-6. Expense can use free cash while consuming Portfolio allocation backed elsewhere.
-7. Parent category rollup includes descendant expenses.
-8. Other Portfolios cannot be silently consumed.
+4. Branch category cannot be silently posted where a leaf is required.
+5. Unlinked expense reduces Free Liquidity and does not alter Portfolio allocations.
+6. Linked expense reduces both physical source Asset and selected Portfolio allocation.
+7. Expense can use eligible Free Cash while consuming Portfolio allocation backed elsewhere.
+8. Parent category and Portfolio rollups include descendants without double counting.
+9. Other Portfolios cannot be silently consumed.
+10. Success resets the posting form; failure preserves it.
 
 ## Benchmark implication
 
@@ -147,5 +170,6 @@ A strong personal financial operating system must answer simultaneously:
 - what did I spend on?
 - where did the money actually leave from?
 - which financial purpose/budget did I consume?
+- who owned/bore/benefited from the event?
 
-without forcing these three questions into a single category/account/envelope field.
+without forcing these questions into one account/category/envelope field.
