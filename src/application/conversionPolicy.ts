@@ -75,24 +75,52 @@ export function applyManagedConversion(state: FinanceState, input: ConversionInp
   }
 
   const targetBasisSar = preview.realizationState === 'cost_continues' ? preview.propagatedTargetBasisSar : preview.targetMarketValueSar
-  const targetId = `holding-${crypto.randomUUID()}`
-  const target: Holding = {
-    id: targetId,
-    symbol: input.targetSymbol.toUpperCase(),
-    name: input.targetName,
-    kind: input.targetKind,
-    nativeUnit: input.targetUnit,
-    quantity: input.targetQuantity,
-    marketPriceSar: input.targetUnitValueSarAtExecution,
-    costLots: [{ id: `lot-${crypto.randomUUID()}`, ownerId: input.ownerId, quantity: input.targetQuantity, unitCostSar: targetBasisSar == null ? undefined : targetBasisSar / input.targetQuantity, acquiredAt: at }],
-    valuationMethod: input.targetKind === 'cash' ? (input.targetSymbol.toUpperCase() === 'SAR' ? 'nominal' : 'fx') : 'market_quote',
-    valuationSource: 'execution',
-    valuedAt: at,
-    groupId: groupId || undefined,
-    location: input.targetLocation,
-    ownership: [{ ownerId: input.ownerId, quantity: input.targetQuantity }],
-    performanceRole: input.targetKind === 'cash' ? 'transactional_cash' : 'investment',
-    acquisitionJourney: preview.realizationState === 'cost_continues' ? [...(source.acquisitionJourney ?? [source.name]), input.targetName] : [input.targetName],
+  const targetSymbolNorm = input.targetSymbol.toUpperCase()
+  const unitCostSar = targetBasisSar == null ? undefined : targetBasisSar / input.targetQuantity
+  const newLot: CostBasisLot = { id: `lot-${crypto.randomUUID()}`, ownerId: input.ownerId, quantity: input.targetQuantity, unitCostSar, totalCostBasisSar: targetBasisSar ?? undefined, acquiredAt: at }
+
+  // RULE-022 / DEC-024 — converting into an already-owned instrument in the same custody context
+  // appends a lot to the existing Asset instead of minting a duplicate identity.
+  const existingTarget = state.holdings.find(h =>
+    !h.archived &&
+    h.kind === input.targetKind &&
+    h.symbol.toUpperCase() === targetSymbolNorm &&
+    (h.groupId ?? undefined) === (groupId || undefined),
+  )
+  const targetId = existingTarget?.id ?? `holding-${crypto.randomUUID()}`
+  let target: Holding
+  if (existingTarget) {
+    const hasOwner = existingTarget.ownership.some(s => s.ownerId === input.ownerId)
+    target = {
+      ...existingTarget,
+      quantity: existingTarget.quantity + input.targetQuantity,
+      marketPriceSar: input.targetUnitValueSarAtExecution,
+      valuedAt: at,
+      valuationSource: 'execution',
+      ownership: hasOwner
+        ? existingTarget.ownership.map(s => s.ownerId === input.ownerId ? { ...s, quantity: s.quantity + input.targetQuantity } : s)
+        : [...existingTarget.ownership, { ownerId: input.ownerId, quantity: input.targetQuantity }],
+      costLots: [...existingTarget.costLots, newLot],
+    }
+  } else {
+    target = {
+      id: targetId,
+      symbol: targetSymbolNorm,
+      name: input.targetName,
+      kind: input.targetKind,
+      nativeUnit: input.targetUnit,
+      quantity: input.targetQuantity,
+      marketPriceSar: input.targetUnitValueSarAtExecution,
+      costLots: [newLot],
+      valuationMethod: input.targetKind === 'cash' ? (targetSymbolNorm === 'SAR' ? 'nominal' : 'fx') : 'market_quote',
+      valuationSource: 'execution',
+      valuedAt: at,
+      groupId: groupId || undefined,
+      location: input.targetLocation,
+      ownership: [{ ownerId: input.ownerId, quantity: input.targetQuantity }],
+      performanceRole: input.targetKind === 'cash' ? 'transactional_cash' : 'investment',
+      acquisitionJourney: preview.realizationState === 'cost_continues' ? [...(source.acquisitionJourney ?? [source.name]), input.targetName] : [input.targetName],
+    }
   }
 
   let slices = state.portfolioSlices
@@ -147,5 +175,8 @@ export function applyManagedConversion(state: FinanceState, input: ConversionInp
       ? 'تم التسييل إلى نقد؛ أصبح فرق التكلفة مقابل صافي النقد ربحًا/خسارة محققة.'
       : 'تحول أصل إلى أصل دون خروج نهائي إلى نقد؛ استمرت التكلفة الاقتصادية إلى الأصل الجديد ولم يُسجل ربح نقدي محقق.',
   }
-  return { ...state, schemaVersion: 5, holdings: state.holdings.map(h => h.id === source.id ? updatedSource : h).concat(target), portfolioSlices: slices, ledger: [tx, ...state.ledger] }
+  const nextHoldings = existingTarget
+    ? state.holdings.map(h => h.id === source.id ? updatedSource : h.id === existingTarget.id ? target : h)
+    : state.holdings.map(h => h.id === source.id ? updatedSource : h).concat(target)
+  return { ...state, schemaVersion: 5, holdings: nextHoldings, portfolioSlices: slices, ledger: [tx, ...state.ledger] }
 }
