@@ -2,260 +2,272 @@
 
 Status: **Living record**
 
-This file records decisions so later sessions do not reopen or silently reinterpret them. Dates below are capture dates when exact original decision dates are not important.
+This file records decisions so later sessions do not reopen or silently reinterpret them. Never delete historical decisions; mark them Superseded/Refined when the model evolves.
 
 ## DEC-001 — Current application is a disposable prototype
 Status: `Approved`
 
-Decision:
-- Current React/Vite website is a proof-of-concept used to validate theory, domain rules and UX.
-- When architecture/specification mature, MyFinMan will be rebuilt cleanly.
-- Future implementation is driven by `docs/spec/`, not by preserving prototype code structure.
-
-Reason:
-Avoid accidental architecture lock-in while still learning through a working app.
+Current React/Vite application is a proof-of-concept used to validate theory, domain rules and UX. Future clean implementation is driven by `docs/spec/`, not preservation of prototype structure.
 
 ---
 
 ## DEC-002 — One financial reality, multiple independent lenses
-Status: `Approved`
+Status: `Approved; refined by ADR-004/ADR-005 terminology`
 
-Decision:
-Owner, beneficiary, Portfolio, Asset/Holding, Account/Custodian, Location, Cost Basis and Valuation are independent dimensions over one financial reality.
-
-Consequence:
-No duplicate wealth records simply to support different UI trees.
+Owner, beneficiary, Portfolio, Asset, Group/provider/custody context, Cost Basis and Valuation are independent dimensions over one financial reality. No duplicate wealth records are created merely to support different UI views.
 
 ---
 
 ## DEC-003 — Portfolio and allocation are one unified concept
 Status: `Approved`
 
-Decision:
-Do not maintain separate competing “Portfolio” and “Allocation” domain trees. Use hierarchical Portfolio plus Portfolio allocation over real owned Assets.
+Use hierarchical Portfolio plus allocation over real owned Asset quantities. Do not maintain a separate competing allocation tree.
 
-Consequence:
-Portfolio can span multiple accounts and asset classes without pretending money moved.
+Portfolio can span providers/Groups and asset classes without pretending money moved.
 
 ---
 
 ## DEC-004 — Ownership is independent from custody
 Status: `Approved`
 
-Decision:
-An asset owned by User and stored by Ahmed remains User’s asset. Custodian does not acquire ownership.
-
-Consequence:
-Owner wealth uses OwnershipShares; custody/account/location are separate filters.
+An Asset owned by User and physically/provider-held by another Party remains User-owned until an explicit ownership event changes that fact.
 
 ---
 
 ## DEC-005 — Claim is different from third-party physical custody
 Status: `Approved`
 
-Decision:
-Specific 500g silver still owned by User and stored by Ahmed is a Holding in Ahmed custody. If Ahmed may use it and merely owes equivalent 500g, User instead has a Claim. Do not count both for the same economic right.
+Specific user-owned value stored by another Party remains a user Asset with external custody metadata. If the Party may use it and only owes equivalent value, model a Claim instead. Do not count both for the same economic right.
 
 ---
 
-## DEC-006 — Realized P/L only on true conversion/disposal/sale
-Status: `Approved`
+## DEC-006 — Realized P/L only on qualifying true disposal/conversion/sale
+Status: `Approved; detailed conversion policy remains scenario-dependent`
 
-Decision:
-Valuation changes, custody movement, Real Transfer of same asset and Portfolio reallocation do not create realized P/L.
+Valuation change, Group reorganization, same-value real transfer and Portfolio reallocation do not create realized P/L.
 
-Asset A → Asset B conversion or true sale/disposal calculates realized result from actual consideration, fees and owner-specific cost basis.
+Qualifying disposal/conversion/sale calculates result from actual consideration, attributable fees and owner-specific basis under approved policy. AcquisitionChain may carry basis across bridge/continuing-capital transformations where the approved management policy says exposure has not economically realized.
 
 ---
 
 ## DEC-007 — Cost basis is owner-specific; current product method weighted average
-Status: `Approved for prototype/product performance; tax policy may differ`
+Status: `Approved for product-performance; refined by DEC-024 exact lot basis`
 
-Decision:
-Shared Holdings can contain different acquisition cost for different owners. Current method for realized product-performance calculation is weighted average per owner.
-
-Consequence:
-Never use one blended cost across owners. Unknown cost remains unknown.
+Shared instrument identity/custody does not merge owners' acquisition costs. Weighted average per owner remains current product-performance method; tax policy may later differ. Unknown cost stays unknown.
 
 ---
 
 ## DEC-008 — Available means unallocated owned quantity
 Status: `Approved; refined by ADR-002`
 
-Decision:
-Available is the Owner’s native Asset quantity not economically assigned to Portfolios.
-
-For the future clean rebuild, ordinary availability is evaluated at `Owner + Asset` economic level across eligible Holdings/Accounts, not necessarily one Holding at a time.
-
-Not:
-- bank balance;
-- total net worth minus Portfolio targets;
-- another owner’s free quantity.
-
-For liquid cash, the user-facing decision metric is **Free Liquidity / السيولة الحرة**.
+Available/Free Liquidity starts from the Owner's actual Asset quantity/value not economically protected by Portfolio or another explicit encumbrance. It is not bank balance, total net worth minus targets, or another owner's free quantity.
 
 ---
 
-## DEC-009 — Real Transfer is the only ordinary operation that changes where same-asset value sits
-Status: `Approved`
+## DEC-009 — Real Transfer changes where same real value sits
+Status: `Approved; terminology refined by ADR-004`
 
-Decision:
-Moving SAR from Alinma to Alrajhi is Real Transfer. It changes physical/account location but not income/expense or realized P/L for principal.
+Moving SAR between two real Cash Assets is a Real Transfer. It changes physical/provider balance context but not Income/Expense or principal P/L.
 
-Portfolio reallocation is purpose-only and must not fake such a transfer.
+Portfolio reallocation and Group reorganization must not fake such a transfer.
 
 ---
 
 ## DEC-010 — Expected income is planning, not wealth
 Status: `Approved`
 
-Decision:
-Expected/late/missed income records do not increase account/Holding quantity. Only actual posted receipt does.
+Expected/late/missed IncomeStream records do not increase Asset quantity. Only actual posted receipt does.
 
 ---
 
 ## DEC-011 — Transaction correction uses same logical identity + revision history
 Status: `Approved`
 
-Decision:
-Fixing an entry error does not create a fake second financial event. Preserve one LogicalTransaction ID, append revision/audit history and atomically reproject dependent effects.
+Fixing entered facts does not create a fake second event.
 
-A real later Refund/Reversal remains a new linked Transaction.
+```text
+Reverse old projection -> replay corrected intent -> same LogicalTransaction ID -> revision audit
+```
+
+A real later refund/reversal is a new linked Transaction.
 
 ---
 
-## DEC-012 — Credit card liability is separate from expense and cash payment
+## DEC-012 — Credit-card liability is separate from expense and cash payment
 Status: `Approved`
 
-Decision:
-Credit purchase creates Expense + Liability. Later card payment reduces cash + Liability and does not create the purchase Expense again.
+Credit purchase creates Expense + Liability. Later card payment reduces Cash Asset + Liability and does not recreate the Expense.
 
 ---
 
 ## DEC-013 — Responsive single application
 Status: `Approved`
 
-Decision:
-The final web product must adapt naturally to browser width:
-- mobile when narrow;
-- tablet composition in-between;
-- professional full desktop web workspace when wide.
-
-No separate business behavior or separate `/mobile` application. No final fixed phone frame on desktop.
+One application adapts to mobile, tablet and desktop. No separate business semantics per form factor.
 
 ---
 
-## DEC-014 — Mobile navigation and desktop navigation represent same destinations
-Status: `Approved direction`
+## DEC-014 — Mobile and desktop navigation represent same destinations
+Status: `Approved direction; labels may evolve`
 
-Decision:
-Primary semantic destinations: Home, Portfolios, Assets & Accounts, Activity, More. Quick Action is persistent/contextual. Asset Conversion is an operation, not necessarily a permanent final primary tab.
-
-Exact visual navigation grouping may evolve through UX testing.
+Navigation destinations are semantic views of the same financial system. Exact labels/grouping may evolve through real-use UX testing.
 
 ---
 
 ## DEC-015 — Documentation is source of truth for future Vibe Coding
 Status: `Approved`
 
-Decision:
-Every meaningful feature must be documented by stable IDs and trace screen → action → use case → domain rules → calculations → persistence → tests.
-
-Coding agents must not silently resolve `TBD` behavior.
+Meaningful changes must trace through specification/decision/scenario/test artifacts. Coding agents must not silently resolve TBD behavior.
 
 ---
 
-## DEC-016 — Target persistence should be relational/transactional; PostgreSQL preference remains Draft
+## DEC-016 — Target persistence relational/transactional; PostgreSQL preference Draft
 Status: `Draft architecture`
 
-Decision proposal:
-Use a relational transactional DB in the clean rebuild, with PostgreSQL preferred because of integrity, precision, recursive queries, audit and reporting.
-
-Not yet Approved:
-Physical DB engine, hosting provider and exact ORM/framework.
+Relational transactional storage is preferred for integrity/precision/audit/reporting. Exact engine/ORM/hosting remains TBD.
 
 ---
 
 ## DEC-017 — Target transaction effects may normalize into TransactionLegs
 Status: `Draft architecture`
 
-Proposal:
-Use LogicalTransaction + TransactionRevision + normalized TransactionLegs to support complex financial events cleanly.
-
-Reason:
-Hard-coded source/target fields become restrictive for credit cards, conversion, fees, ownership, claims and clearing.
-
-Constraint:
-TransactionLeg genericity must not weaken deterministic domain validation.
+LogicalTransaction + TransactionRevision + validated normalized TransactionLegs is the target direction for complex multi-effect events. Genericity must not weaken deterministic business validation.
 
 ---
 
-## DEC-018 — Physical distribution creates Holdings, not duplicate Assets
-Status: `Approved`
+## DEC-018 — Physical distribution identity
+Status: `Refined/Superseded in terminology by ADR-005`
 
-Decision:
-Gold remains one Gold Asset and Silver remains one Silver Asset at the economic/product level even when the owner's quantity is split across Home, Al Rajhi, Brother custody or other storage contexts.
+Historical wording said: one Gold `Asset master` with several `Holdings` across Home/Al Rajhi/Brother.
 
-Separate custody/location pools are represented as separate Holdings of the same Asset. Asset totals are derived aggregations across the owner's Holdings and must not be stored again as additional wealth.
+Current canonical interpretation:
+
+```text
+InstrumentDefinition: Gold / XAU   [reference identity; no wealth]
+├── Asset instance: Gold at Al Rajhi
+└── Asset instance: Gold at Brother/Home/etc.
+```
 
 Consequences:
-- moving Gold/Silver between storage locations changes Holdings/custody distribution but not Asset identity or total ownership;
-- custody movement does not create income, expense, conversion or realized P/L;
-- cost basis must survive/re-associate with moved quantity rather than reset;
-- UI may show Asset, Custody and Portfolio lenses over the same records.
+- same economic instrument may have several concrete Asset instances when holding/custody contexts are intentionally separate;
+- total Gold/Silver exposure is a derived aggregation by InstrumentDefinition/identity;
+- the derived total is never stored as another wealth Asset;
+- movement/custody change does not create Income/Expense or reset basis;
+- explicit custodian/provider/location metadata carries physical truth; Group may organize/mirror context but remains organizational.
 
-Scenario reference: `docs/spec/scenarios/SCN-001-precious-metals-distributed-custody.md`.
+Scenario: SCN-001. Refinement: ADR-005.
 
 ---
 
 ## DEC-019 — Ordinary Portfolio allocation may be custody-independent
 Status: `Superseded by ADR-002 — Approved`
 
-Historical proposal:
-Evaluate replacing ordinary `PortfolioSlice -> Holding` coupling with an economic allocation at `Owner + Asset` level and make exact physical Holding/Item reservation optional.
-
-Resolution:
-The user clarified that the reason for assigning Portfolio money to bank balances was to protect it from unrestricted spending, not because Portfolio purpose inherently belongs to a bank. `ADR-002` approves economic `Owner + Asset` Portfolio allocation by default and derives Free Liquidity across Accounts. Exact Account/Holding backing is optional.
-
-Scenario references:
-- `docs/spec/scenarios/SCN-001-precious-metals-distributed-custody.md`
-- `docs/spec/scenarios/SCN-002-income-producing-assets-and-investment-portfolio.md`
+Ordinary Portfolio purpose operates economically over Owner + Asset quantity and is not inherently tied to provider/Group location. Exact designated/hard backing is optional policy when intentionally required.
 
 ---
 
 ## DEC-020 — Free Liquidity is a first-class decision metric
 Status: `Approved`
 
-Decision:
-For liquid Assets such as SAR Cash, MyFinMan must distinguish physical cash owned from cash free for unrestricted spending.
+For liquid Assets, MyFinMan distinguishes owned cash from unrestricted cash. Physical payment comes from an actual Cash Asset; selected Portfolio determines WHY value is consumed. No fake transfer is created merely to align purpose with provider location.
+
+---
+
+## DEC-021 — Group -> Asset is canonical user wealth hierarchy
+Status: `Approved via ADR-004`
+
+```text
+Group
+├── Group
+├── Asset
+└── Asset
+```
+
+Group is the only user hierarchy/container and has no financial truth. Asset is quantity-bearing financial truth. Asset never contains Asset. Account/Place are not mandatory target-domain layers; legacy rows may remain for import compatibility.
+
+---
+
+## DEC-022 — Broker/investment account context is not Portfolio
+Status: `Draft target refinement validated by real snapshot; ADR-005/SCN-022`
+
+A real broker/investment context is represented by Group/context plus the Assets actually held there.
 
 Example:
 
 ```text
-Total SAR Cash across banks = 1,000,000
-Portfolio-reserved SAR Cash =   950,000
-Free Liquidity             =    50,000
+الاستثمارات -> الراجحي المالية
+├── Cash SAR Asset
+├── Cash USD Asset
+├── Fund Asset
+└── Stock Asset
 ```
 
-The user should see and behave against `50,000` as unrestricted spendable cash even though bank balances total `1,000,000`.
-
-A physical payment can come from any eligible bank account. It changes that Account's real balance, while purpose consumption is determined by the selected Portfolio or by Free Liquidity. No fake bank transfer is created merely to make purpose allocation match the payment account.
-
-If unrestricted spending would consume reserved money or push Free Liquidity below zero, the product must require an explicit decision rather than silently overspend Portfolio allocations.
-
-Full rationale and target architecture: `docs/spec/decisions/ADR-002-portfolio-allocation-and-free-liquidity.md`.
+Portfolio remains optional WHY and may span several Groups/providers. A Portfolio is not required merely because a broker account exists.
 
 ---
 
-# How to add a decision
+## DEC-023 — InstrumentDefinition is reference identity; Asset is concrete holding/balance
+Status: `Draft target refinement validated across SCN-001/022; ADR-005`
 
-For a small decision, append `DEC-xxx` here with:
-- status;
-- decision;
-- reason;
-- consequences;
-- alternatives if relevant.
+InstrumentDefinition answers `ما هي الأداة؟` and carries catalog/market metadata without wealth.
 
-For a consequential architecture choice (DB engine, API style, sync, auth, accounting representation), create a full ADR from `ADR-TEMPLATE.md` and reference it here.
+Asset answers `ماذا أملك فعليًا وكم؟` and carries quantity, owner, exact basis and valuation.
 
-Never delete old decisions. Mark them `Deprecated/Superseded by DEC/ADR-xxx` so history remains understandable.
+One InstrumentDefinition may identify several intentional Asset instances. Manual Assets may initially be unmatched and later linked without rewriting history.
+
+---
+
+## DEC-024 — Repeated purchase adds an exact lot to an existing selected Asset
+Status: `Draft target refinement / implementation open #36 and #38`
+
+A new purchase transaction does not imply a new Asset.
+
+If user selects an existing compatible Asset:
+- increase quantity/ownership;
+- append independent exact CostBasisLot;
+- keep purchase Transaction independent;
+- derive weighted-average cost from active exact lots.
+
+If user intentionally wants a separate holding/context, create another Asset instance.
+
+No automatic merge by name/symbol alone.
+
+Exact lot basis + quantity are financial truth; display-rounded unit cost is derived.
+
+---
+
+## DEC-025 — Investment cash distribution is linked to the source investment
+Status: `Draft target refinement / implementation open #37`
+
+A cash distribution from a Fund/Investment Asset is a first-class financial event:
+
+```text
+Investment Asset -- distribution --> destination Cash Asset
+```
+
+Ordinary cash distribution increases cash without reducing investment units unless the actual product event says otherwise.
+
+Performance separates:
+- Market P/L;
+- Cash Income;
+- realized result;
+- Total Return.
+
+An accumulating fund does not generate invented cash income merely because NAV rises. Return-of-capital requires separate basis policy.
+
+---
+
+## DEC-026 — Reporting/current FX valuation is independent from historical basis
+Status: `Approved distinction / precision implementation open #38`
+
+Native quantity, current/reporting valuation and historical acquisition basis are distinct facts.
+
+Foreign-currency opening uses actual known historical basis/rate or unknown. It never invents `1 SAR/unit` as basis. Reporting currency changes presentation only.
+
+---
+
+# How to add/refine a decision
+
+For a small decision append `DEC-xxx` with status, decision, reason and consequences.
+For consequential architecture create/update an ADR and reference it here.
+Never delete history; mark old interpretations Deprecated/Superseded/Refined so the evolution remains understandable.

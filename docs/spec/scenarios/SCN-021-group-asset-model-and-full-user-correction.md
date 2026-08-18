@@ -1,126 +1,176 @@
-# SCN-021 — Group → Asset and full user correction
+# SCN-021 — Group -> Asset and Full User Correction
 
-Status: **Approved / Implemented / Verification pending CI**
+Status: **Approved structural baseline / Implemented in schema-v5 prototype / Refined by Draft ADR-005**
 Date: 2026-08-18
-Related: ADR-004
+Related: ADR-004, ADR-005
 
 ## Goal
-Verify that the wealth tree contains only Groups and Assets, while all user-entered financial data can be corrected or safely removed without fake containers or silent balance corruption.
+Verify that the main wealth tree contains only Groups and quantity-bearing Assets, while user-entered data remains correctable without fake containers or silent balance corruption.
 
-## Scenario A — bank-style cash asset
-User creates:
+## Structural baseline
 
 ```text
-البنوك                 Group
-└── الراجحي الجاري     Asset(kind=cash, currency=SAR)
+Group
+├── Group
+├── Asset
+└── Asset
 ```
 
-The Asset itself carries its SAR balance, owner, optional institution, last4 and account-style metadata. No child SAR Holding and no separate Account are required.
+- Group = only user hierarchy/container;
+- Asset = concrete financial quantity/value;
+- Asset never contains Asset;
+- Account is legacy compatibility only, not mandatory target architecture.
 
-Expected:
-- opening balance creates one opening transaction;
-- changing display name or Group does not post a transaction;
-- changing quantity creates audited correction;
-- deleting it reverses/voids safe origin events or records a reconciliation before archiving.
+## ADR-005 refinement — instrument identity != concrete Asset instance
+A shared market/economic instrument may identify several concrete Assets.
 
-## Scenario B — foreign currency reporting
-User creates `حساب الدولار` as a Cash Asset with 40 USD.
-Reporting currency = SAR.
+Example:
 
-Expected:
-- native quantity remains 40 USD;
-- roll-up uses reference 3.75 SAR/USD and shows 150 SAR;
-- reporting currency selection never mutates the Asset or Ledger.
+```text
+InstrumentDefinition = Gold / XAU
 
-## Scenario C — physical gold directly in a Group
+Asset A = Gold held at Al Rajhi
+Asset B = Gold held by Brother
+```
+
+High-level Gold exposure is derived across A+B. It is not stored as a third quantity-bearing Asset.
+
+This reconciles older `Asset master + Holdings` language with the current user-facing Asset term.
+
+## Scenario A — bank-style Cash Asset
+
+```text
+البنوك
+└── الراجحي الجاري   Asset cash / SAR
+```
+
+Asset carries native quantity, owner and optional institution/last4/account-style metadata.
+No child SAR Holding and no mandatory Account are required.
+
+## Scenario B — foreign currency
+`حساب الدولار` is a Cash Asset with native USD quantity.
+Reporting currency may be SAR without changing quantity/history.
+Historical acquisition basis is actual known basis or unknown; current FX does not fabricate it.
+
+## Scenario C — physical Gold directly in a Group
 
 ```text
 المعادن
-└── ذهب 24
+└── ذهب
 ```
 
-Expected:
-- no `حساب أصول الذهب` is manufactured;
-- gold may be bought from a Cash Asset and placed directly under `المعادن`;
-- correcting the purchase can change source Asset, amount, owner, target Group, quantity, fees and asset metadata;
-- deleting untouched purchase restores the payment Asset and removes the purchased Asset while retaining a voided audit record.
+No fake `حساب أصول الذهب` is manufactured.
+
+If custody is important, explicit custodian/provider/location metadata belongs to the Asset. Group placement remains organizational and may mirror the custody context without becoming the custody truth itself.
 
 ## Scenario D — land and vehicle
 
 ```text
-العقارات
-└── أرض حلب
-
-المركبات
-└── سيارتي
+العقارات -> أرض حلب
+المركبات -> سيارتي
 ```
 
-Expected: neither Asset requires an Account/container.
+Neither requires an Account/container.
 
 ## Scenario E — free reorganization
-Move `ذهب 24` from `المعادن` to `استثمارات طويلة الأجل` and rename it.
+Rename/move an Asset between Groups.
 
-Expected:
-- Asset ID unchanged;
-- quantity, owner, Cost Basis, valuation, portfolio slices and Ledger unchanged;
-- Group roll-ups immediately reflect the new placement.
+Expected unchanged:
+- Asset ID;
+- quantity;
+- ownership;
+- exact Cost Basis lots;
+- valuation;
+- Portfolio purpose;
+- Ledger.
 
-## Scenario F — opening balance correction
-A user mistakenly enters the opening state repeatedly.
+If physical custody actually changes, record the real custody/transfer event separately rather than inferring it from Group drag/drop.
 
-Expected:
-- one logical posted opening transaction per Asset + Owner;
-- correction changes the projected quantity to the desired opening state instead of stacking duplicates;
-- redundant old opening rows become voided audit history.
+## Scenario F — opening correction
+One active logical opening state per Asset + Owner context.
+Duplicate prototype openings consolidate/void where safe.
+Opening is state initialization, not income.
 
-## Scenario G — correction of common transactions
-For each posted user transaction:
-- income;
-- expense;
-- real transfer;
-- asset purchase;
-- opening state.
-
-Expected:
-1. open edit modal;
-2. correct financial fields and metadata;
-3. reverse old projection;
-4. replay corrected projection;
-5. retain same Transaction ID;
-6. increment version and append previous snapshot to revisions.
-
-## Scenario H — delete common transactions
-Deleting income, expense, real transfer, opening state or untouched asset purchase must reverse its economic effect and mark the original transaction voided.
-
-If a complex downstream chain prevents safe reversal, the operation must refuse with an explicit message rather than partially delete data.
-
-## Scenario I — v4 migration
-Input snapshot:
+## Scenario G — repeated purchases
+If user buys more of an existing chosen fund/metal/share:
 
 ```text
-Group: البنوك
-└── Account: الراجحي الجاري
-    └── Holding: رصيد SAR = 27,163.03
+existing Asset quantity += new quantity
+append exact CostBasisLot
+append purchase LogicalTransaction
 ```
 
-After normalization:
+Do not create a new Asset merely because a second purchase occurred.
+
+If the user intentionally wants a separate holding/context, create another Asset instance linked to the same InstrumentDefinition.
+
+## Scenario H — exact basis
+A 50,000 SAR purchase for fractional fund units must preserve exactly 50,000 SAR lot basis within approved monetary tolerance.
+Display-rounded unit cost is derived and never becomes financial truth.
+
+## Scenario I — investment distribution
+A distributing Fund Asset may produce actual Cash:
 
 ```text
-Group: البنوك
-└── Asset: الراجحي الجاري = 27,163.03 SAR
+Fund Asset -- investment_distribution --> Cash Asset
 ```
 
-Expected:
-- quantity unchanged;
-- ownership unchanged;
-- Cost Basis unchanged;
-- Ledger unchanged;
-- no duplicate Asset value;
-- legacy Account may remain in compatibility storage but is not rendered or required by new flows.
+Ordinary cash distribution:
+- increases Cash Asset;
+- keeps fund units unchanged;
+- remains linked to source Fund/Instrument/Position for performance;
+- is distinct from NAV/market P/L.
+
+Accumulating fund creates no fake cash income when NAV rises.
+
+## Scenario J — Portfolio purpose
+Portfolio remains WHY and optional.
+
+A real broker context can be represented by a Group such as `الاستثمارات -> الراجحي المالية`, while the Cash/Fund/Stock values inside it are Assets.
+
+Portfolio may instead represent purposes such as:
+- دخل دوري;
+- نمو طويل الأجل;
+- حفظ القوة الشرائية.
+
+Portfolio can span several Groups/providers.
+
+## Scenario K — user correction and delete
+For supported user transactions:
+1. edit entered truth;
+2. reverse old projection;
+3. replay corrected projection;
+4. keep LogicalTransaction ID;
+5. append revision;
+6. preserve independent lots/transactions not affected by the correction.
+
+Delete of financial history means reverse/void, never raw removal.
+
+If downstream dependencies cannot be replayed safely, refuse rather than corrupt state.
+
+## Scenario L — v4 migration
+Historical:
+
+```text
+Group -> Account -> Holding
+```
+
+normalizes to:
+
+```text
+Group -> Asset
+```
+
+without changing quantity, ownership, Cost Basis or Ledger and without duplicating wealth.
 
 ## Core assertions
-- `Group → Asset`, never `Asset → Asset`.
-- Account is not mandatory target architecture.
-- user organization does not mutate financial truth.
-- user financial correction changes projections consistently and remains audited.
-- user deletion is safe reverse/void, not raw data destruction.
+1. Group -> Asset, never Asset -> Asset.
+2. Group has no independent financial truth.
+3. Account is not mandatory target architecture.
+4. InstrumentDefinition is reference identity only, not wealth.
+5. one instrument may have several intentional Asset instances.
+6. repeated purchase may add a lot to an existing Asset.
+7. exact total lot basis is preserved; rounding is display-only.
+8. Portfolio = WHY, not broker/account context.
+9. investment cash distributions are linked source-to-cash events.
+10. user correction is audited reverse/reprojection.

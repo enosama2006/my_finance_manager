@@ -1,45 +1,67 @@
-# SCN-015 — Single Opening Balance, Correction, and Safe Void
+# SCN-015 — Single Opening State, Correction, and Safe Void
 
-Status: **Approved product rule / Implementing Prototype**
+Status: **Approved product rule / Implemented for common Asset opening flows**
 Date: 2026-08-18
 
 ## User problem
-The same opening balance was submitted multiple times because the form did not clearly confirm success or clear its fields. Since an opening balance changes the actual Holding, deleting only the Ledger row would leave the financial state wrong.
+Opening state is easy to submit more than once during onboarding. Because it changes real Asset quantity, deleting only a Ledger row would leave financial state wrong.
 
 ## Approved rule
-An opening balance is a **state initialization**, not recurring income.
+An opening is **state initialization**, not recurring Income.
 
-For one `(Account + Owner + Asset/Symbol)` there MUST be at most one active opening-balance Logical Transaction.
+For one:
 
-If the opening balance was entered incorrectly, the user edits that opening balance. The application adjusts the underlying Holding by the difference and keeps an audit trail.
+```text
+Asset instance + Owner
+```
 
-## Existing duplicate correction behavior
-If legacy/prototype data contains multiple posted opening transactions for the same `(Account + Owner + Asset/Symbol)`, editing the opening balance consolidates them into one canonical active opening transaction and marks the redundant opening transactions as voided. The Holding is adjusted by:
+there must be at most one active logical opening state for the same initialized quantity context.
 
-`desired opening quantity - sum(current active opening quantities)`
+The historical schema-v4 key using `Account + Owner + Asset/Symbol` is superseded by the direct Asset model.
 
-No income is created.
+## Correction
+If the user entered the opening quantity incorrectly, correction adjusts the Asset projection to the desired state and preserves revision audit.
+
+Legacy duplicate opening rows are consolidated/voided where deterministic and safe.
 
 ## Delete semantics
-The UI may say `حذف`, but a posted financial transaction is never silently removed from history. Internally deletion means **void/reversal**:
-- reverse the transaction's financial effect where the projection is safely reversible;
-- mark the Logical Transaction `voided`;
-- retain its audit history and reason.
+User-facing `حذف` means:
+- reverse the opening projection;
+- mark the LogicalTransaction voided;
+- keep audit reason/history.
 
-Opening-balance transactions are safely reversible because they only initialize/increase one Holding and optionally one portfolio slice.
+A financial row is never hidden/deleted without reversing its effect.
 
-Other transaction kinds require their own reversal/replay rules before deletion is enabled. A Ledger row must never be deleted without reversing its Holdings / Cost Basis / Portfolio / P&L effects.
+## Foreign-currency opening
+Native quantity and historical Cost Basis are independent facts.
+
+Example:
+
+```text
+Asset quantity = 6,645 USD
+Current reporting valuation = 3.75 SAR/USD
+```
+
+The historical acquisition basis must be:
+- actual user-provided basis/rate if known; or
+- unknown if not known.
+
+The system MUST NOT invent `1 SAR/USD` simply because the native quantity is 6,645 USD.
+
+Reporting/current FX valuation never rewrites historical basis.
 
 ## UX
-1. Opening-balance form detects an existing opening for the selected Account + Owner + Symbol.
-2. If one exists, the form switches from `إضافة الرصيد الافتتاحي` to `تعديل الرصيد الافتتاحي` and pre-fills the current opening quantity.
-3. After a successful add/edit, show a prominent success Toast and clear transient fields.
-4. Prevent double-submit while saving.
-5. Ledger exposes `حذف/إلغاء` for opening balances, requiring confirmation and a reason; the underlying Holding is reduced accordingly.
+1. Detect existing opening for selected Asset + Owner.
+2. Switch to correction instead of stacking another active opening.
+3. Success toast and reset transient fields.
+4. Failure keeps user input.
+5. Prevent double-submit.
+6. Ledger exposes audited void where safely reversible.
 
 ## Acceptance
-- Submitting an opening balance twice does not create two active opening transactions.
-- Editing 3 accidental opening entries of 1,000 SAR into a desired 1,000 SAR reduces the Holding from 3,000 to 1,000 SAR and leaves one active opening transaction.
-- Voiding the remaining opening transaction reduces the Holding to zero and marks the transaction voided without erasing audit history.
-- Income remains repeatable and is not subject to the one-opening rule.
-- A Ledger deletion can never be display-only if the transaction has financial effects.
+- submitting opening twice does not create two active opening states;
+- correction adjusts Asset quantity rather than stacking another balance;
+- void reverses quantity and retains audit;
+- recurring Income remains repeatable;
+- foreign-currency opening supports unknown basis;
+- current FX/reporting value does not fabricate historical Cost Basis.

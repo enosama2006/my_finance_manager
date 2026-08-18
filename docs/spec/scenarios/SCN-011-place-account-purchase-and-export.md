@@ -1,195 +1,96 @@
-# SCN-011 — Place-First Custody, Simple Asset Purchase, Market Valuation and Portable Snapshot
+# SCN-011 — Historical Place/Account Purchase Scenario — Superseded Interpretation
 
-Status: **Draft Scenario / Implemented Prototype pressure test**
+Status: **Scenario facts retained / Place -> Account -> Holding architecture Superseded by ADR-004 and ADR-005**
 
-## Scenario intent
+## Why this file remains
 
-Pressure-test the full onboarding path using user-understandable data rather than preset demo values.
+This scenario was a useful prototype pressure-test for:
+- clean onboarding;
+- simple amount-paid / quantity-received purchase UX;
+- Cost Basis versus current valuation;
+- unrealized versus realized P/L;
+- Asset-to-Asset cost carry;
+- JSON export/import reproducibility.
 
-The user wants to start from an empty product and create:
+Those facts remain valuable.
 
-1. a Place named `مصرف الراجحي`;
-2. multiple Accounts under the same bank;
-3. balances under those Accounts;
-4. a Gold purchase using a simple amount-paid / quantity-received workflow;
-5. a current market valuation that is independent from cost;
-6. an unrealized result while Gold remains held;
-7. realization only when Gold is liquidated to Cash;
-8. a portable JSON snapshot that can be attached later to reproduce the exact synthetic dataset.
-
-## Step A — Create the Place
-
-Create:
+The old required hierarchy does **not** remain valid:
 
 ```text
-Place: مصرف الراجحي
-Type: Bank
+Place -> Account -> Holding
 ```
 
-Expected:
-- immediate success feedback;
-- no Holding/value is created;
-- the bank becomes an available parent for Account creation.
+No future work may infer from this scenario that Place or Account is mandatory.
 
-## Step B — Create multiple Accounts under the same bank
-
-Create:
+## Current target interpretation
 
 ```text
-مصرف الراجحي
-  → جاري شخصي (checking, SAR)
-  → حساب استثماري (investment)
-  → بطاقة سفر / بطاقة ائتمان as applicable
+Group
+├── Cash Asset
+└── purchased Asset
 ```
 
-Expected:
-- each Account visibly belongs to the bank;
-- zero-balance Accounts remain visible;
-- opening the bank in Assets & Accounts shows all Accounts beneath it;
-- the bank itself is not counted as wealth.
+Optional InstrumentDefinition identifies the economic/market instrument. Group is the only user hierarchy. Asset is quantity-bearing financial truth.
 
-## Step C — Add opening Cash
+A real bank/broker context may be mirrored by a Group and descriptive institution/provider metadata, but the Group itself has no balance.
 
-Add:
+## Updated purchase example
+
+Given:
 
 ```text
-Place: مصرف الراجحي
-Account: جاري شخصي
-Asset: SAR Cash
-Opening quantity: 20,000 SAR
-```
-
-Expected:
-- account value becomes 20,000 SAR;
-- transaction classification is Opening, not Income;
-- Cash Holding is nested under the Account.
-
-## Step D — Buy Gold using natural inputs
-
-Assume:
-
-```text
-Paid from: مصرف الراجحي → جاري شخصي → SAR
-Amount paid: 5,400 SAR
-Asset type: Gold
-Quantity received: 10 g
-Stored at: selected destination Place → Account/Container
-```
-
-The user does **not** enter:
-- `AssetKind=metal` manually;
-- a per-unit cost of 540;
-- an arbitrary normal market price;
-- a PerformanceRole.
-
-Expected deterministic cost:
-
-```text
-Cost Basis = 5,400 SAR
-Effective Unit Cost = 5,400 / 10 = 540 SAR/g
-```
-
-If a market quote returns, for example, 530 SAR/g:
-
-```text
-Current Value = 10 × 530 = 5,300 SAR
-Unrealized P/L = 5,300 − 5,400 = -100 SAR
-Unrealized Return = -100 / 5,400 ≈ -1.8519%
-```
-
-The -100 is visible but not realized.
-
-If no quote returns, purchase still succeeds:
-- Cost Basis remains 5,400;
-- current valuation temporarily uses the acquisition-cost fallback;
-- source/timestamp/method explain that a market quote has not yet replaced it.
-
-## Step E — Market refresh
-
-For supported instruments the user can request `تحديث السعر`.
-
-Expected:
-- only valuation changes;
-- quantity and cost lots do not change;
-- unrealized P/L changes;
-- no Ledger cash flow or realized P/L is created.
-
-## Step F — Transform Gold into another Asset
-
-Example:
-
-```text
-10g Gold → XRP
-Attributable fee = 50 SAR
-Disposed Gold Cost Basis = 5,400 SAR
-```
-
-If this is an Asset-to-Asset continuing capital transformation, the prototype policy is:
-
-```text
-Realized P/L = none
-XRP Cost Basis = 5,400 + 50 = 5,450 SAR
-```
-
-The physical conversion is recorded, but no fake cash-realized profit is created merely because Gold had a current market quote above/below its cost.
-
-This policy is management-accounting oriented and remains Draft for future explicit sale/repurchase/tax-lot edge cases.
-
-## Step G — Liquidate Gold directly to Cash
-
-Alternative path:
-
-```text
-Gold historical Cost Basis = 5,400 SAR
-Net SAR received = 5,500 SAR
+Cash Asset: الراجحي الجاري = 20,000 SAR
+Paid = 5,400 SAR
+Instrument/type = Gold
+Quantity received = 10 g
+Target Group = المعادن
 ```
 
 Expected:
 
 ```text
-Realized P/L = +100 SAR
+Cash Asset -5,400 SAR
+Gold Asset +10 g
+Exact purchase lot basis = 5,400 SAR
+Effective unit cost = derived from 5,400 / 10
 ```
 
-At this point the result becomes realized because the economic position has exited to Cash.
+If Gold Asset already exists and the user explicitly chooses `زيادة أصل موجود`, the purchase appends a new CostBasisLot instead of manufacturing another Gold Asset merely because it is another purchase.
 
-If only part of the Holding is sold, only the disposed weighted-average cost basis should participate in the realized result. Partial disposal remains an area for deeper UX/acceptance coverage.
+If the user intentionally holds Gold separately elsewhere, a separate Asset instance may reference the same Gold InstrumentDefinition.
 
-## Step H — Export exact user test data
+## Valuation
 
-User selects `Export Data`.
+If quote = 530 SAR/g:
 
-Expected:
-- a versioned `myfinman-YYYY-MM-DD.json` snapshot downloads;
-- the file contains the full synthetic FinanceState and metadata;
-- the user can attach it after future changes so the same understood numbers are restored rather than replacing them with developer demo data.
+```text
+Current value = 5,300
+Cost basis = 5,400
+Unrealized result = -100
+```
 
-Import:
-- requires confirmation because it replaces current local state;
-- validates snapshot version/schema;
-- restores Places, Accounts, Holdings, Portfolios, categories, Ledger, Positions and Cycles together.
+A quote refresh changes valuation only. It never rewrites exact historical basis or creates cash flow.
 
-## Invariant pressure tests
+## Disposal
 
-1. Place ≠ Account ≠ Asset.
-2. One Place may own/display many Account containers.
-3. Land/Stock/Fund remain Assets even if the user speaks colloquially about “where my money is”.
-4. Every Holding must have an Account/container in the current prototype model.
-5. Purchase cost is derived from actual economic funding, not typed again as unit cost.
-6. Market valuation never overwrites historical cost.
-7. Unrealized P/L cannot become realized merely because a quote changed.
-8. Cash exit may realize P/L.
-9. Asset-to-Asset capital transformation may continue Cost Basis without cash realization.
-10. Export/import must preserve financial truth exactly enough for scenario reproduction.
+Asset -> Cash true disposal may realize P/L under policy.
+Asset -> Asset continuing acquisition/cost-flow may carry attributable basis according to SCN-007/SCN-008 and final disposal policy.
 
-## UX acceptance
+## Export/import
 
-- Successful Place creation shows an immediate success toast.
-- Successful Account creation shows an immediate success toast.
-- Purchase form is Place-first and Account-second on both source and destination.
-- Asset type is selected from the catalog.
-- Additional costs are advanced/optional, not a primary required field.
-- Current market price is system-provided when available; missing provider is explicit, not silently invented.
-- No ordinary purchase field asks the user to choose `PerformanceRole`.
-- Assets screen defaults to Place → Account → Holding.
-- Holdings show cost, current value, absolute unrealized P/L and unrealized return %.
-- Data Export and Import are visible product actions.
+The original portability requirement remains Approved direction:
+- versioned snapshot;
+- complete related state;
+- schema validation;
+- explicit confirmation before replacing current local state;
+- no demo data substitution.
+
+## Superseded invariants
+
+The following old statements are explicitly invalid:
+- `Place != Account != Asset` as mandatory user hierarchy;
+- `Every Holding must have an Account/container`;
+- purchase destination must be Place-first/Account-second;
+- Assets screen must default to Place -> Account -> Holding.
+
+Replacement invariants are ADR-004/ADR-005 and SCN-021/SCN-022.

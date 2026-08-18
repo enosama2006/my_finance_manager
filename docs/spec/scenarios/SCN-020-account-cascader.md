@@ -1,24 +1,47 @@
-# SCN-020 — Hierarchical Account Cascader
+# SCN-020 — Hierarchical Financial-Source Cascader — Superseded Terminal Type
 
-Status: Implemented
+Status: **Original Account terminal Superseded / UX pattern retained / Group -> eligible Asset replacement planned in Issue #33**
 
-## Decision
-All user-facing account selection in financial operations must follow the active AccountGroup tree instead of a flat account list.
+## Historical decision
+The first implementation preserved AccountGroup hierarchy and used Account as the terminal selectable node.
 
-## UX
-- Level 1 shows all active root account groups.
-- Selecting a group reveals the next level with active child groups and eligible direct accounts.
-- Child groups may be traversed recursively.
-- Empty groups remain visible so the organization created by the user is never hidden.
-- An account is the terminal selectable node.
-- Accounts with no group are available through a synthetic `بدون مجموعة` root.
-- Breadcrumb shows the selected path.
+That terminal type is obsolete after ADR-004 because Account is no longer a mandatory target-domain object.
+
+## Current decision
+Financial operations that choose an existing source/destination Asset should navigate:
+
+```text
+root Group
+→ child Group
+→ ...
+→ eligible Asset
+```
+
+Group is navigation only. Asset is the terminal selectable financial object.
+
+## UX rules retained
+- show all relevant active root Groups;
+- selecting a Group reveals child Groups and eligible direct Assets;
+- recurse arbitrarily;
+- preserve empty Groups where useful so user-created organization does not disappear;
+- show a clear empty/no-eligible-Asset state inside a branch;
+- no automatic selection of first Asset;
+- Breadcrumb shows selected path;
+- deterministic Arabic sorting;
+- operation-specific eligibility predicate decides which Assets are terminal choices.
+
+Examples:
+- Purchase payment source -> Cash Assets with available quantity;
+- Expense source -> eligible Cash Assets;
+- Transfer source/target -> compatible Cash Assets;
+- Repeated purchase destination -> existing compatible investment Asset;
+- Portfolio allocation -> owner-eligible Asset.
 
 ## Invariants
-- Cascading changes selection UI only; it creates no ledger entry and changes no balances.
-- Eligibility filters may hide accounts, but must never hide active groups.
-- A group itself cannot be submitted where an Account ID is required.
-- Account order is deterministic within each level: groups first, then accounts, preserving the user's hierarchy instead of flattening paths into labels.
+- Cascader changes selection UI only;
+- it creates no Ledger event;
+- it changes no Asset/Group/Portfolio relation merely by browsing;
+- Group can never be submitted where an Asset ID is required.
 
-## Coverage
-The same cascader should be used for existing-asset registration, purchase source/target accounts, adding funds, and transfers.
+## Tracking
+Reusable `GroupAssetCascader` / equivalent is tracked by Issue #33.
