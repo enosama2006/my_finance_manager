@@ -1,4 +1,4 @@
-import { ownerQuantity, ownerWeightedAverageCostSar, resizeCostBasisLot, round2 } from '../domain/finance'
+import { ownerQuantity, ownerWeightedAverageCostSar, resizeCostBasisLot, round2, roundQuantity } from '../domain/finance'
 import type { FinanceState, Holding, LedgerTransaction, TransactionRevision } from '../domain/types'
 import { createAsset, type CreateAssetInput } from './assets'
 
@@ -14,8 +14,8 @@ function ownerExists(state: FinanceState, ownerId: string) { if (!state.parties.
 function snapshot(tx: LedgerTransaction): TransactionRevision['snapshot'] { return { at: tx.at, title: tx.title, amountSar: tx.amountSar, costBasisSar: tx.costBasisSar, ownerId: tx.ownerId, sourceHoldingId: tx.sourceHoldingId, targetHoldingId: tx.targetHoldingId, sourceQuantity: tx.sourceQuantity, targetQuantity: tx.targetQuantity, exchangeRate: tx.exchangeRate, feesSar: tx.feesSar, realizedGainLossSar: tx.realizedGainLossSar, note: tx.note, portfolioId: tx.portfolioId, expenseCategoryId: tx.expenseCategoryId, expenseNecessity: tx.expenseNecessity, expenseBeneficiaryId: tx.expenseBeneficiaryId, userInput: tx.userInput } }
 function setOwnerQuantity(asset: Holding, ownerId: string, desired: number, unitCostSar?: number, increaseBasisSar?: number) {
   const current = ownerQuantity(asset, ownerId)
-  const normalizedDesired = round2(desired)
-  const delta = round2(normalizedDesired - current)
+  const normalizedDesired = roundQuantity(desired)
+  const delta = roundQuantity(normalizedDesired - current)
   if (asset.quantity + delta < -1e-9) throw new Error('التصحيح سيجعل الأصل سالبًا')
   let costLots = [...asset.costLots]
   if (delta > 1e-9) {
@@ -27,14 +27,14 @@ function setOwnerQuantity(asset: Holding, ownerId: string, desired: number, unit
     let remaining = Math.abs(delta)
     costLots = costLots.map(lot => {
       if (lot.ownerId !== ownerId || remaining <= 1e-9) return lot
-      const used = Math.min(lot.quantity, remaining); remaining = round2(remaining - used)
-      return resizeCostBasisLot(lot, round2(lot.quantity - used))
+      const used = Math.min(lot.quantity, remaining); remaining = roundQuantity(remaining - used)
+      return resizeCostBasisLot(lot, roundQuantity(lot.quantity - used))
     }).filter(lot => lot.quantity > 1e-9)
     if (remaining > 1e-9) throw new Error('تعذر عكس Cost Basis بدقة')
   }
   const ownership = asset.ownership.filter(x => x.ownerId !== ownerId)
   if (normalizedDesired > 1e-9) ownership.push({ ownerId, quantity: normalizedDesired })
-  return { ...asset, quantity: round2(asset.quantity + delta), ownership, costLots }
+  return { ...asset, quantity: roundQuantity(asset.quantity + delta), ownership, costLots }
 }
 
 export interface SetAssetOpeningBalanceInput {
@@ -55,10 +55,10 @@ export function setAssetOpeningBalance(state: FinanceState, input: SetAssetOpeni
   ownerExists(state, input.ownerId)
   const asset = activeAsset(state, input.assetId)
   const existing = state.ledger.filter(tx => tx.kind === 'opening' && tx.status === 'posted' && tx.targetHoldingId === asset.id && tx.ownerId === input.ownerId)
-  const currentOpening = round2(existing.reduce((sum, tx) => sum + (tx.targetQuantity ?? 0), 0))
+  const currentOpening = roundQuantity(existing.reduce((sum, tx) => sum + (tx.targetQuantity ?? 0), 0))
   const currentOwner = ownerQuantity(asset, input.ownerId)
-  const nonOpening = round2(currentOwner - currentOpening)
-  const desiredOwner = round2(nonOpening + input.quantity)
+  const nonOpening = roundQuantity(currentOwner - currentOpening)
+  const desiredOwner = roundQuantity(nonOpening + input.quantity)
   if (desiredOwner < -1e-9) throw new Error('لا يمكن ضبط الرصيد الافتتاحي بهذه القيمة بسبب حركات لاحقة')
 
   const isSar = asset.symbol.toUpperCase() === 'SAR'
@@ -71,14 +71,14 @@ export function setAssetOpeningBalance(state: FinanceState, input: SetAssetOpeni
   const updatedAsset = setOwnerQuantity(asset, input.ownerId, desiredOwner, unitCost, increase > 0 && unitCost != null ? increase * unitCost : undefined)
 
   if (existing.length === 0) {
-    const tx: LedgerTransaction = { id: id('tx'), version: 1, status: 'posted', revisions: [], at: now(), kind: 'opening', title: input.title?.trim() || `رصيد افتتاحي: ${asset.name}`, amountSar: openingReportingValueSar, costBasisSar: openingBasisSar, ownerId: input.ownerId, targetHoldingId: asset.id, targetQuantity: round2(input.quantity), note: openingBasisSar == null ? 'حالة افتتاحية؛ القيمة الحالية مسجلة للتقرير، أما التكلفة التاريخية فغير معروفة ولم يتم افتراض سعر صرف لها.' : 'حالة افتتاحية واحدة لهذا الأصل؛ التكلفة التاريخية محفوظة مستقلة عن القيمة الحالية.' }
+    const tx: LedgerTransaction = { id: id('tx'), version: 1, status: 'posted', revisions: [], at: now(), kind: 'opening', title: input.title?.trim() || `رصيد افتتاحي: ${asset.name}`, amountSar: openingReportingValueSar, costBasisSar: openingBasisSar, ownerId: input.ownerId, targetHoldingId: asset.id, targetQuantity: roundQuantity(input.quantity), note: openingBasisSar == null ? 'حالة افتتاحية؛ القيمة الحالية مسجلة للتقرير، أما التكلفة التاريخية فغير معروفة ولم يتم افتراض سعر صرف لها.' : 'حالة افتتاحية واحدة لهذا الأصل؛ التكلفة التاريخية محفوظة مستقلة عن القيمة الحالية.' }
     return { ...state, schemaVersion: 5, holdings: state.holdings.map(h => h.id === asset.id ? updatedAsset : h), ledger: [tx, ...state.ledger] }
   }
 
   const canonical = existing[existing.length - 1]
   const reason = input.reason?.trim() || 'تصحيح الرصيد الافتتاحي'
   const redundant = new Set(existing.filter(tx => tx.id !== canonical.id).map(tx => tx.id))
-  const updatedTx: LedgerTransaction = { ...canonical, version: canonical.version + 1, revisions: [...canonical.revisions, { version: canonical.version, changedAt: now(), reason, snapshot: snapshot(canonical) }], title: input.title?.trim() || canonical.title, amountSar: openingReportingValueSar, costBasisSar: openingBasisSar, targetQuantity: round2(input.quantity), note: existing.length > 1 ? `تم توحيد ${existing.length} حالات افتتاحية في سجل واحد.` : openingBasisSar == null ? `تم التصحيح: ${reason}. التكلفة التاريخية ما زالت غير معروفة.` : `تم التصحيح: ${reason}` }
+  const updatedTx: LedgerTransaction = { ...canonical, version: canonical.version + 1, revisions: [...canonical.revisions, { version: canonical.version, changedAt: now(), reason, snapshot: snapshot(canonical) }], title: input.title?.trim() || canonical.title, amountSar: openingReportingValueSar, costBasisSar: openingBasisSar, targetQuantity: roundQuantity(input.quantity), note: existing.length > 1 ? `تم توحيد ${existing.length} حالات افتتاحية في سجل واحد.` : openingBasisSar == null ? `تم التصحيح: ${reason}. التكلفة التاريخية ما زالت غير معروفة.` : `تم التصحيح: ${reason}` }
   return { ...state, schemaVersion: 5, holdings: state.holdings.map(h => h.id === asset.id ? updatedAsset : h), ledger: state.ledger.map(tx => tx.id === canonical.id ? updatedTx : redundant.has(tx.id) ? { ...tx, status: 'voided', version: tx.version + 1, revisions: [...tx.revisions, { version: tx.version, changedAt: now(), reason: 'حالة افتتاحية مكررة', snapshot: snapshot(tx) }], note: 'ملغاة أثناء توحيد الحالة الافتتاحية.' } : tx) }
 }
 
@@ -102,8 +102,8 @@ export function addIncomeToAsset(state: FinanceState, input: AddAssetIncomeInput
   const current = ownerQuantity(asset, input.ownerId)
   const unitCost = asset.marketPriceSar
   const basis = input.quantity * unitCost
-  const updated = setOwnerQuantity(asset, input.ownerId, round2(current + input.quantity), unitCost, basis)
-  const tx: LedgerTransaction = { id: id('tx'), version: 1, status: 'posted', revisions: [], at: now(), kind: 'income', title: input.title?.trim() || `دخل إلى ${asset.name}`, amountSar: round2(input.quantity * unitCost), costBasisSar: basis, ownerId: input.ownerId, targetHoldingId: asset.id, targetQuantity: round2(input.quantity), note: input.note?.trim() || 'دخل أضافه المستخدم إلى الأصل النقدي.' }
+  const updated = setOwnerQuantity(asset, input.ownerId, roundQuantity(current + input.quantity), unitCost, basis)
+  const tx: LedgerTransaction = { id: id('tx'), version: 1, status: 'posted', revisions: [], at: now(), kind: 'income', title: input.title?.trim() || `دخل إلى ${asset.name}`, amountSar: round2(input.quantity * unitCost), costBasisSar: basis, ownerId: input.ownerId, targetHoldingId: asset.id, targetQuantity: roundQuantity(input.quantity), note: input.note?.trim() || 'دخل أضافه المستخدم إلى الأصل النقدي.' }
   return { ...state, schemaVersion: 5, holdings: state.holdings.map(h => h.id === asset.id ? updated : h), ledger: [tx, ...state.ledger] }
 }
 
@@ -135,7 +135,7 @@ export function transferBetweenAssets(state: FinanceState, input: TransferBetwee
   let exchangeRate: number
 
   if (sameCurrency) {
-    targetQuantity = round2(input.quantity)
+    targetQuantity = roundQuantity(input.quantity)
     exchangeRate = 1
   } else {
     const hasTarget = input.targetQuantity != null && Number.isFinite(input.targetQuantity) && input.targetQuantity > 0
@@ -143,16 +143,16 @@ export function transferBetweenAssets(state: FinanceState, input: TransferBetwee
     if (!hasTarget && !hasRate) throw new Error('عند اختلاف العملة أدخل المبلغ المستلم أو سعر التحويل')
 
     if (hasTarget) {
-      targetQuantity = round2(input.targetQuantity!)
+      targetQuantity = roundQuantity(input.targetQuantity!)
       exchangeRate = input.quantity / targetQuantity
       if (hasRate) {
-        const expectedTarget = round2(input.quantity / input.exchangeRate!)
+        const expectedTarget = roundQuantity(input.quantity / input.exchangeRate!)
         if (Math.abs(expectedTarget - targetQuantity) > 0.01) throw new Error('المبلغ المستلم وسعر التحويل غير متطابقين')
         exchangeRate = input.exchangeRate!
       }
     } else {
       exchangeRate = input.exchangeRate!
-      targetQuantity = round2(input.quantity / exchangeRate)
+      targetQuantity = roundQuantity(input.quantity / exchangeRate)
     }
     if (targetQuantity <= 0) throw new Error('المبلغ المستلم يجب أن يكون أكبر من صفر')
   }
@@ -160,10 +160,10 @@ export function transferBetweenAssets(state: FinanceState, input: TransferBetwee
   const sourceCost = ownerWeightedAverageCostSar(source, input.ownerId)
   const knownSourceCost = sourceCost ?? undefined
   const transferredBasis = sourceCost == null ? undefined : input.quantity * sourceCost
-  const nextSource = setOwnerQuantity(source, input.ownerId, round2(sourceOwned - input.quantity), knownSourceCost)
+  const nextSource = setOwnerQuantity(source, input.ownerId, roundQuantity(sourceOwned - input.quantity), knownSourceCost)
   const targetOwned = ownerQuantity(target, input.ownerId)
   const targetUnitBasis = transferredBasis == null ? undefined : transferredBasis / targetQuantity
-  const nextTarget = setOwnerQuantity(target, input.ownerId, round2(targetOwned + targetQuantity), targetUnitBasis, transferredBasis)
+  const nextTarget = setOwnerQuantity(target, input.ownerId, roundQuantity(targetOwned + targetQuantity), targetUnitBasis, transferredBasis)
   const reportingValueSar = round2(input.quantity * source.marketPriceSar)
   const realized = sameCurrency || transferredBasis == null ? null : round2(reportingValueSar - transferredBasis)
 
@@ -175,13 +175,13 @@ export function transferBetweenAssets(state: FinanceState, input: TransferBetwee
     ownerId: input.ownerId,
     sourceHoldingId: source.id,
     targetHoldingId: target.id,
-    sourceQuantity: round2(input.quantity),
+    sourceQuantity: roundQuantity(input.quantity),
     targetQuantity,
     exchangeRate,
     realizedGainLossSar: realized,
     note: input.note?.trim() || (sameCurrency
       ? (transferredBasis == null ? 'نقل بين أصلين نقديين بنفس العملة؛ التكلفة التاريخية للمصدر غير معروفة فبقيت غير معروفة.' : 'نقل بين أصلين نقديين بنفس العملة؛ لا يغير Cost Basis الإجمالية.')
-      : `FX Transfer بسعر ${exchangeRate} ${source.symbol}/${target.symbol}. المبلغ المصدر ${round2(input.quantity)} ${source.symbol} والمستلم ${targetQuantity} ${target.symbol}.`),
+      : `FX Transfer بسعر ${exchangeRate} ${source.symbol}/${target.symbol}. المبلغ المصدر ${roundQuantity(input.quantity)} ${source.symbol} والمستلم ${targetQuantity} ${target.symbol}.`),
   }
   return { ...state, schemaVersion: 5, holdings: state.holdings.map(h => h.id === source.id ? nextSource : h.id === target.id ? nextTarget : h), ledger: [tx, ...state.ledger] }
 }

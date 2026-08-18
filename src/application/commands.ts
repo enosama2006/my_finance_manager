@@ -156,7 +156,8 @@ export function addFunds(state: FinanceState, input: AddFundsInput): FinanceStat
 
 export interface ExistingAssetInput {
   ownerId: string
-  accountId: string
+  /** Legacy Account is optional per DEC-021 / ADR-004. Empty string treated as absent. */
+  accountId?: string
   name: string
   symbol: string
   kind: AssetKind
@@ -173,17 +174,17 @@ export function addExistingAsset(state: FinanceState, input: ExistingAssetInput)
   positive(input.quantity, 'الكمية')
   positive(input.marketPriceSar, 'القيمة السوقية للوحدة')
   if (!input.name.trim()) throw new Error('اسم الأصل مطلوب')
-  const account = accountOf(state, input.accountId)
+  const account = input.accountId ? state.accounts.find(a => a.id === input.accountId && a.status === 'active') : undefined
   if (input.costBasisSar != null && input.costBasisSar < 0) throw new Error('التكلفة لا يمكن أن تكون سالبة')
   const holdingId = id('holding')
   const positionId = input.costBasisSar != null ? id('pos') : undefined
-  const unitCost = input.costBasisSar == null ? undefined : round2(input.costBasisSar / input.quantity)
+  const unitCost = input.costBasisSar == null ? undefined : input.costBasisSar / input.quantity
   const holding: Holding = {
     id: holdingId, symbol: input.symbol.trim().toUpperCase() || input.name.slice(0, 4), name: input.name.trim(), kind: input.kind,
     nativeUnit: input.nativeUnit.trim() || 'وحدة', quantity: input.quantity, marketPriceSar: input.marketPriceSar,
-    costLots: [{ id: id('lot'), ownerId: input.ownerId, quantity: input.quantity, unitCostSar: unitCost, acquiredAt: now() }],
+    costLots: [{ id: id('lot'), ownerId: input.ownerId, quantity: input.quantity, unitCostSar: unitCost, totalCostBasisSar: input.costBasisSar, acquiredAt: now() }],
     valuationMethod: input.kind === 'cash' ? cashValuation(input.symbol) : 'manual_appraisal', valuationSource: 'user-entry', valuedAt: now(),
-    accountId: account.id, custodianId: account.custodianId, location: input.location?.trim() || undefined,
+    accountId: account?.id, custodianId: account?.custodianId, location: input.location?.trim() || undefined,
     ownership: [{ ownerId: input.ownerId, quantity: input.quantity }], performanceRole: input.performanceRole, positionId,
     acquisitionJourney: ['أصل قائم قبل التسجيل', input.name.trim()],
   }
