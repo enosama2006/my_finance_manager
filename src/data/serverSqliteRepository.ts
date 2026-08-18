@@ -42,6 +42,13 @@ async function api<T = unknown>(path: string, init?: RequestInit): Promise<ApiEn
 }
 
 export function createServerSqliteFinanceRepository() {
+  let writeQueue: Promise<void> = Promise.resolve()
+  const serializeWrite = (work: () => Promise<void>) => {
+    const next = writeQueue.then(work, work)
+    writeQueue = next.catch(() => undefined)
+    return next
+  }
+
   return {
     async status(): Promise<ServerStorageStatus> {
       try {
@@ -62,6 +69,7 @@ export function createServerSqliteFinanceRepository() {
     },
 
     async load(): Promise<FinanceState | null> {
+      await writeQueue
       try {
         const body = await api('/api/state')
         return body.state ?? null
@@ -71,11 +79,15 @@ export function createServerSqliteFinanceRepository() {
       }
     },
 
-    async save(state: FinanceState): Promise<void> {
-      await api('/api/state', { method: 'PUT', body: JSON.stringify({ state }) })
+    save(state: FinanceState): Promise<void> {
+      const payload = JSON.stringify({ state })
+      return serializeWrite(async () => {
+        await api('/api/state', { method: 'PUT', body: payload })
+      })
     },
 
     async migrate(state: FinanceState): Promise<ServerStorageStatus> {
+      await writeQueue
       const body = await api<ServerStorageStatus>('/api/storage/migrate', {
         method: 'POST',
         body: JSON.stringify({ state, source: 'legacy-browser', note: 'Explicit migration initiated by the user from MyFinMan.' }),
@@ -84,11 +96,14 @@ export function createServerSqliteFinanceRepository() {
     },
 
     async checkpoint(id: string, state: FinanceState, createdAt: string): Promise<void> {
+      await writeQueue
       await api('/api/storage/checkpoint', { method: 'POST', body: JSON.stringify({ id, state, createdAt }) })
     },
 
-    async clear(): Promise<void> {
-      await api('/api/state', { method: 'DELETE' })
+    clear(): Promise<void> {
+      return serializeWrite(async () => {
+        await api('/api/state', { method: 'DELETE' })
+      })
     },
   }
 }
