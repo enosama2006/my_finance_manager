@@ -1,6 +1,6 @@
 # SCN-025 — Opening correction reprojects without fake transactions
 
-Status: **Approved / implementation under verification**
+Status: **Approved / Implemented / automated verification passed / awaiting real-use verification**
 Date: 2026-08-18
 Related: ADR-008, #56, SCN-018
 
@@ -82,14 +82,17 @@ If the Opening and all recorded transactions are believed correct, but an extern
 
 Here the user explicitly knows the Opening input itself was wrong, so the correct action is **Correction + Reprojection**, not Reconciliation.
 
-## Acceptance
+## Acceptance — automated result
 
-- [ ] Correcting 75.09 → 65.09 succeeds after the later 40 USD transfer.
-- [ ] Current source projection becomes 25.09 USD.
-- [ ] Target of the real 40 USD transfer remains unchanged.
-- [ ] Opening keeps the same Transaction ID and adds one revision containing 75.09.
-- [ ] Later transaction stays unchanged.
-- [ ] Ledger count does not increase.
-- [ ] No reconciliation/fake financial transaction is created.
-- [ ] Unknown historical basis remains unknown.
-- [ ] SQLite persistence/build/test suite remain green.
+- [x] Correcting 75.09 → 65.09 succeeds after the later 40 USD transfer.
+- [x] Current source projection becomes 25.09 USD.
+- [x] Target of the real 40 USD transfer remains unchanged.
+- [x] Opening keeps the same Transaction ID and adds one revision containing 75.09.
+- [x] Later transaction stays unchanged.
+- [x] Ledger count does not increase.
+- [x] No reconciliation/fake financial transaction is created.
+- [x] Unknown historical basis remains unknown.
+- [x] SQLite persistence integration test remains green.
+- [x] TypeScript and Vite Production Build remain green.
+
+Automated verification on PR #57: 18 Vitest files / 99 tests passed, plus 1 file-backed SQLite integration test passed. Real-use verification remains pending until the user corrects the actual USD Opening in the running application and confirms the persisted result after reload.
