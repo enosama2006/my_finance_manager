@@ -4,6 +4,7 @@ import { useFinance } from '../application/store'
 import type { AddFundsInput, AllocateToPortfolioInput, CreatePortfolioInput, ExistingAssetInput, TransferFundsInput } from '../application/commands'
 import type { CreateGroupedAccountInput } from '../application/accountGroups'
 import { previewSimplifiedPurchase, type SimplifiedPurchaseInput } from '../application/purchase'
+import { AccountCascader } from '../components/AccountCascader'
 import { useToast } from '../components/ToastProvider'
 import { assetTypeById, assetTypeCatalog, defaultPerformanceRoleForKind, type AssetTypeId } from '../domain/assetCatalog'
 import { currencyByCode, currencyCatalog, currencyReferenceRateSar } from '../domain/currencies'
@@ -49,20 +50,6 @@ function num(value: string) { return Number(value.replace(/,/g, '')) }
 function err(error: unknown) { return error instanceof Error ? error.message : 'تعذر تنفيذ العملية' }
 function activeAccounts(accounts: Account[]) { return accounts.filter(a => a.status === 'active') }
 
-function accountGroupPath(state: FinanceState, account: Account): string {
-  if (!account.groupId) return 'بدون مجموعة'
-  const groups = (state.accountGroups ?? []).filter(g => g.status === 'active')
-  const names: string[] = []
-  let current = groups.find(g => g.id === account.groupId)
-  const seen = new Set<string>()
-  while (current && !seen.has(current.id)) {
-    seen.add(current.id); names.unshift(current.name)
-    current = current.parentId ? groups.find(g => g.id === current!.parentId) : undefined
-  }
-  return names.length ? names.join(' ← ') : 'بدون مجموعة'
-}
-function accountLabel(state: FinanceState, account: Account) { return `${accountGroupPath(state, account)} ← ${account.name}` }
-
 export function OperationsV2({ goTrade }: { goTrade: () => void }) {
   const finance = useFinance()
   const toast = useToast()
@@ -105,12 +92,12 @@ export function OperationsV2({ goTrade }: { goTrade: () => void }) {
 type PurchaseProps = { state: FinanceState; accounts: Account[]; portfolios: Portfolio[]; onSubmit: (input: SimplifiedPurchaseInput) => void }
 function PurchaseForm({ state, accounts, portfolios, onSubmit }: PurchaseProps) {
   const paymentAccounts = accounts.filter(a => a.kind !== 'credit_card' && state.holdings.some(h => !h.archived && h.kind === 'cash' && h.accountId === a.id && ownerQuantity(h, SELF_ID) > 0))
-  const [sourceAccountId, setSourceAccount] = useState(paymentAccounts[0]?.id ?? '')
+  const [sourceAccountId, setSourceAccount] = useState('')
   const sourceCash = state.holdings.filter(h => !h.archived && h.kind === 'cash' && h.accountId === sourceAccountId && ownerQuantity(h, SELF_ID) > 0)
-  const [sourceHoldingId, setSourceHolding] = useState(sourceCash[0]?.id ?? '')
+  const [sourceHoldingId, setSourceHolding] = useState('')
   const [amountPaid, setAmountPaid] = useState('')
   const targetAccounts = accounts.filter(a => a.kind !== 'credit_card')
-  const [targetAccountId, setTargetAccount] = useState(targetAccounts[0]?.id ?? '')
+  const [targetAccountId, setTargetAccount] = useState('')
   const [assetTypeId, setAssetType] = useState<AssetTypeId>('gold')
   const definition = assetTypeById(assetTypeId)!
   const [name, setName] = useState(definition.label)
@@ -170,9 +157,9 @@ function PurchaseForm({ state, accounts, portfolios, onSubmit }: PurchaseProps) 
   if (!accounts.length) return <EmptyAction title="لا توجد حسابات بعد" text="أنشئ حسابًا أولًا؛ المجموعة اختيارية وليست شرطًا." />
   if (!paymentAccounts.length) return <EmptyAction title="لا يوجد رصيد صالح للدفع" text="أضف رصيدًا نقديًا إلى أحد الحسابات أولًا." />
 
-  return <FormShell title="شراء أصل" subtitle="اختر حساب الدفع وحساب حفظ الأصل مباشرة. المجموعة تظهر في الاسم فقط لتسهيل التنظيم."><form className="trade-form" onSubmit={submit}>
+  return <FormShell title="شراء أصل" subtitle="اختر الحساب عبر شجرتك: مجموعة ← مجموعة فرعية ← حساب. لا يوجد اختيار تلقائي لحساب عشوائي."><form className="trade-form" onSubmit={submit}>
     <div className="divider">من أين دفعت؟</div>
-    <Field label="حساب الدفع"><select value={sourceAccountId} onChange={e => setSourceAccount(e.target.value)}>{paymentAccounts.map(a => <option key={a.id} value={a.id}>{accountLabel(state, a)}</option>)}</select></Field>
+    <AccountCascader state={state} accounts={paymentAccounts} value={sourceAccountId} onChange={setSourceAccount} label="حساب الدفع" helper="تظهر كل المجموعات النشطة؛ الحسابات غير الصالحة للدفع لا تكون عقدًا نهائية قابلة للاختيار." />
     <Field label="الرصيد المستخدم"><select value={sourceHoldingId} onChange={e => setSourceHolding(e.target.value)}><option value="">اختر الرصيد</option>{sourceCash.map(h => <option key={h.id} value={h.id}>{h.symbol} — متاح {ownerQuantity(h, SELF_ID).toLocaleString('ar-SA')} {h.nativeUnit}</option>)}</select></Field>
     <div className="field-grid"><Field label={`المبلغ المدفوع${source ? ` (${source.nativeUnit})` : ''}`}><input value={amountPaid} onChange={e => setAmountPaid(e.target.value)} inputMode="decimal" placeholder="مثال: 5400" /></Field><Field label="المحفظة (اختياري)"><select value={portfolioId} onChange={e => setPortfolio(e.target.value)}><option value="">من السيولة الحرة</option>{portfolios.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}</select></Field></div>
 
@@ -182,7 +169,7 @@ function PurchaseForm({ state, accounts, portfolios, onSubmit }: PurchaseProps) 
     <div className="field-grid"><Field label={`الكمية المستلمة (${definition.defaultUnit})`}><input value={quantity} onChange={e => setQuantity(e.target.value)} inputMode="decimal" /></Field><Field label="الموقع الجغرافي للأصل المادي (اختياري)"><input value={location} onChange={e => setLocation(e.target.value)} placeholder="حلب / الرياض..." /></Field></div>
 
     <div className="divider">في أي حساب سيُحفظ الأصل؟</div>
-    <Field label="حساب الحفظ"><select value={targetAccountId} onChange={e => setTargetAccount(e.target.value)}><option value="">اختر الحساب</option>{targetAccounts.map(a => <option key={a.id} value={a.id}>{accountLabel(state, a)}</option>)}</select></Field>
+    <AccountCascader state={state} accounts={targetAccounts} value={targetAccountId} onChange={setTargetAccount} label="حساب الحفظ" />
 
     <button className="ghost advanced-toggle" type="button" onClick={() => setShowAdvanced(!showAdvanced)}>{showAdvanced ? 'إخفاء التفاصيل المتقدمة' : 'تفاصيل متقدمة: رسوم/تكاليف إضافية'}</button>
     {showAdvanced && <Field label="تكاليف إضافية كلية بالريال"><input value={extraCosts} onChange={e => setExtraCosts(e.target.value)} inputMode="decimal" placeholder="0" /><small>لا تدخل spread مضمنًا مرة ثانية إذا كان المبلغ المدفوع يعكسه أصلًا.</small></Field>}
@@ -213,13 +200,11 @@ function AccountForm({ state, onSubmit }: { state: FinanceState; onSubmit: (inpu
 function FundsForm({ state, owners, accounts, portfolios, onSubmit }: { state: FinanceState; owners: Party[]; accounts: Account[]; portfolios: Portfolio[]; onSubmit: (input: AddFundsInput) => boolean }) {
   const eligible = accounts.filter(a => a.kind !== 'credit_card')
   const [ownerId, setOwner] = useState(owners.find(o => o.id === SELF_ID)?.id ?? owners[0]?.id ?? '')
-  const [accountId, setAccount] = useState(eligible[0]?.id ?? '')
-  const initialCurrency = eligible[0]?.currency && currencyByCode(eligible[0].currency) ? currencyByCode(eligible[0].currency)!.code : 'SAR'
-  const [symbol, setSymbol] = useState(initialCurrency)
-  const initialRate = currencyReferenceRateSar(initialCurrency) ?? 1
+  const [accountId, setAccount] = useState('')
+  const [symbol, setSymbol] = useState('SAR')
   const [quantity, setQuantity] = useState('')
-  const [unitCost, setUnitCost] = useState(String(initialRate))
-  const [market, setMarket] = useState(String(initialRate))
+  const [unitCost, setUnitCost] = useState('1')
+  const [market, setMarket] = useState('1')
   const [classification, setClass] = useState<'opening' | 'income'>('opening')
   const [portfolioId, setPortfolio] = useState('')
   const fixedRate = currencyReferenceRateSar(symbol)
@@ -245,19 +230,19 @@ function FundsForm({ state, owners, accounts, portfolios, onSubmit }: { state: F
   }
   if (!eligible.length) return <EmptyAction title="أنشئ حسابًا أولًا" text="الرصيد يجب أن يوجد داخل حساب. المجموعة ليست شرطًا." />
   return <FormShell title="إضافة رصيد" subtitle="أدخل الرصيد بعملته الأصلية. التطبيق يحتفظ بالكمية الأصلية ويحوّل قيمتها إلى عملة العرض في التجميع والتقارير."><form className="trade-form" onSubmit={submit}>
-    <Field label="الحساب"><select value={accountId} onChange={e => setAccount(e.target.value)}>{eligible.map(a => <option key={a.id} value={a.id}>{accountLabel(state, a)}</option>)}</select></Field>
+    <AccountCascader state={state} accounts={eligible} value={accountId} onChange={setAccount} label="الحساب" />
     <div className="field-grid three"><Field label="المالك"><select value={ownerId} onChange={e => setOwner(e.target.value)}>{owners.map(o => <option key={o.id} value={o.id}>{o.name}</option>)}</select></Field><Field label="العملة"><select value={symbol} onChange={e => setSymbol(e.target.value)}>{currencyCatalog.map(item => <option key={item.code} value={item.code}>{item.code} — {item.label}</option>)}</select></Field><Field label={`المبلغ (${symbol})`}><input value={quantity} onChange={e => setQuantity(e.target.value)} inputMode="decimal" /></Field></div>
     {fixedRate != null ? <div className="operation-rule"><span>سعر التقييم المرجعي: 1 {symbol} = {money.format(fixedRate)} ر.س{currency?.referenceNote ? ` • ${currency.referenceNote}` : ''}. الكمية تبقى {symbol}؛ هذا السعر يستخدم فقط للتقييم والتجميع.</span></div> : symbol !== 'SAR' && <div className="field-grid"><Field label="تكلفة الوحدة بالريال"><input value={unitCost} onChange={e => setUnitCost(e.target.value)} inputMode="decimal" placeholder="مثال: سعر الاقتناء بالريال" /></Field><Field label="القيمة الحالية للوحدة بالريال"><input value={market} onChange={e => setMarket(e.target.value)} inputMode="decimal" placeholder="سعر الصرف الحالي إلى SAR" /></Field></div>}
     <div className="field-grid"><Field label="التصنيف"><select value={classification} onChange={e => setClass(e.target.value as 'opening' | 'income')}><option value="opening">رصيد قائم / افتتاحي — مرة واحدة</option><option value="income">دخل جديد — قابل للتكرار</option></select></Field><Field label="المحفظة (اختياري)"><select value={portfolioId} onChange={e => setPortfolio(e.target.value)}><option value="">بدون تخصيص</option>{portfolios.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}</select></Field></div>
     {classification === 'opening' && <div className="operation-rule"><span>إذا كان هناك رصيد افتتاحي سابق لنفس الحساب والمالك والعملة، فلن نضيفه مرة ثانية؛ سيتم تعديل الرصيد الافتتاحي الموجود وتوحيد أي إدخالات مكررة قديمة.</span></div>}
-    <button className="primary wide" type="submit">{classification === 'opening' ? 'حفظ الرصيد الافتتاحي' : 'إضافة الدخل'}</button>
+    <button className="primary wide" type="submit" disabled={!accountId || !quantity.trim()}>{classification === 'opening' ? 'حفظ الرصيد الافتتاحي' : 'إضافة الدخل'}</button>
   </form></FormShell>
 }
 
 function ExistingAssetForm({ state, owners, accounts, portfolios, onSubmit }: { state: FinanceState; owners: Party[]; accounts: Account[]; portfolios: Portfolio[]; onSubmit: (input: ExistingAssetInput) => void }) {
   const eligible = accounts.filter(a => a.kind !== 'credit_card')
   const [ownerId, setOwner] = useState(owners.find(o => o.id === SELF_ID)?.id ?? owners[0]?.id ?? '')
-  const [accountId, setAccount] = useState(eligible[0]?.id ?? '')
+  const [accountId, setAccount] = useState('')
   const [assetTypeId, setType] = useState<AssetTypeId>('vehicle')
   const def = assetTypeById(assetTypeId)!
   const [name, setName] = useState('')
@@ -275,32 +260,36 @@ function ExistingAssetForm({ state, owners, accounts, portfolios, onSubmit }: { 
     onSubmit({ ownerId, accountId, name: name || def.label, symbol: symbol || def.defaultSymbol || name.slice(0, 5), kind: def.kind, nativeUnit: def.defaultUnit, quantity: num(quantity), costBasisSar: totalCost, marketPriceSar: currentUnit, performanceRole: defaultPerformanceRoleForKind(def.kind), portfolioId: portfolioId || undefined, location: location || undefined })
   }
   if (!eligible.length) return <EmptyAction title="أنشئ حسابًا أولًا" text="حتى الأصل القائم يحتاج وعاء حسابيًا نعرف أنه موجود داخله." />
-  return <FormShell title="تسجيل أصل تملكه مسبقًا" subtitle="لا ننشئ دفعة تاريخية وهمية. اختر الحساب الذي يحتوي الأصل الآن."><form className="trade-form" onSubmit={submit}>
-    <Field label="الحساب / الوعاء"><select value={accountId} onChange={e => setAccount(e.target.value)}>{eligible.map(a => <option key={a.id} value={a.id}>{accountLabel(state, a)}</option>)}</select></Field>
+  return <FormShell title="تسجيل أصل تملكه مسبقًا" subtitle="اختر المجموعة ثم تابع نزولًا في الشجرة حتى تصل إلى الحساب الذي يحتوي الأصل الآن. المجموعات الفارغة تظل ظاهرة."><form className="trade-form" onSubmit={submit}>
+    <AccountCascader state={state} accounts={eligible} value={accountId} onChange={setAccount} label="الحساب / الوعاء" helper="المجموعة ليست حسابًا ولا تُحفظ كوجهة للأصل؛ يجب الوصول إلى حساب نهائي." />
     <Field label="نوع الأصل"><select value={assetTypeId} onChange={e => setType(e.target.value as AssetTypeId)}>{assetTypeCatalog.map(item => <option key={item.id} value={item.id}>{item.groupLabel} — {item.label}</option>)}</select></Field>
     <div className="field-grid"><Field label="اسم الأصل"><input value={name} onChange={e => setName(e.target.value)} placeholder={def.label} /></Field><Field label="الرمز (إن وجد)"><input value={symbol} onChange={e => setSymbol(e.target.value.toUpperCase())} placeholder={def.defaultSymbol || ''} /></Field></div>
     <div className="field-grid three"><Field label={`الكمية (${def.defaultUnit})`}><input value={quantity} onChange={e => setQuantity(e.target.value)} inputMode="decimal" /></Field><Field label="إجمالي التكلفة التاريخية"><input value={cost} onChange={e => setCost(e.target.value)} inputMode="decimal" placeholder="اختياري" /></Field><Field label="القيمة الحالية للوحدة"><input value={current} onChange={e => setCurrent(e.target.value)} inputMode="decimal" placeholder="اختياري" /></Field></div>
     <div className="field-grid"><Field label="المالك"><select value={ownerId} onChange={e => setOwner(e.target.value)}>{owners.map(o => <option key={o.id} value={o.id}>{o.name}</option>)}</select></Field><Field label="المحفظة"><select value={portfolioId} onChange={e => setPortfolio(e.target.value)}><option value="">بدون تخصيص</option>{portfolios.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}</select></Field></div>
     <Field label="الموقع الجغرافي للأصل المادي (اختياري)"><input value={location} onChange={e => setLocation(e.target.value)} placeholder="مثال: حلب" /></Field>
-    <button className="primary wide" type="submit">تسجيل الأصل</button>
+    <button className="primary wide" type="submit" disabled={!accountId}>تسجيل الأصل</button>
   </form></FormShell>
 }
 
 function TransferForm({ state, accounts, onSubmit }: { state: FinanceState; accounts: Account[]; onSubmit: (input: TransferFundsInput) => void }) {
   const sourceAccounts = accounts.filter(a => state.holdings.some(h => h.kind === 'cash' && !h.archived && h.accountId === a.id && ownerQuantity(h, SELF_ID) > 0))
-  const [sourceAccountId, setSourceAccount] = useState(sourceAccounts[0]?.id ?? '')
+  const [sourceAccountId, setSourceAccount] = useState('')
   const sourceHoldings = state.holdings.filter(h => h.kind === 'cash' && !h.archived && h.accountId === sourceAccountId && ownerQuantity(h, SELF_ID) > 0)
-  const [holdingId, setHolding] = useState(sourceHoldings[0]?.id ?? '')
+  const [holdingId, setHolding] = useState('')
   const [quantity, setQuantity] = useState('')
-  const [targetAccountId, setTargetAccount] = useState(accounts.find(a => a.id !== sourceAccountId)?.id ?? '')
-  useEffect(() => { const first = state.holdings.find(h => h.kind === 'cash' && !h.archived && h.accountId === sourceAccountId && ownerQuantity(h, SELF_ID) > 0); setHolding(first?.id ?? ''); if (targetAccountId === sourceAccountId) setTargetAccount(accounts.find(a => a.id !== sourceAccountId)?.id ?? '') }, [sourceAccountId, state.holdings, accounts, targetAccountId])
+  const [targetAccountId, setTargetAccount] = useState('')
+  useEffect(() => {
+    const first = state.holdings.find(h => h.kind === 'cash' && !h.archived && h.accountId === sourceAccountId && ownerQuantity(h, SELF_ID) > 0)
+    setHolding(first?.id ?? '')
+    if (sourceAccountId && targetAccountId === sourceAccountId) setTargetAccount('')
+  }, [sourceAccountId, state.holdings, targetAccountId])
   const submit = (e: FormEvent) => { e.preventDefault(); onSubmit({ sourceHoldingId: holdingId, ownerId: SELF_ID, quantity: num(quantity), targetAccountId }) }
   if (accounts.length < 2) return <EmptyAction title="تحتاج حسابين على الأقل" text="أنشئ الحسابات مباشرة ثم انقل الأموال بينها." />
-  return <FormShell title="نقل أموال" subtitle="نفس العملة تنتقل من حساب إلى حساب. المجموعة لا تدخل في الحركة."><form className="trade-form" onSubmit={submit}>
-    <div className="divider">من</div><Field label="الحساب"><select value={sourceAccountId} onChange={e => setSourceAccount(e.target.value)}>{sourceAccounts.map(a => <option key={a.id} value={a.id}>{accountLabel(state, a)}</option>)}</select></Field>
-    <div className="field-grid"><Field label="الرصيد"><select value={holdingId} onChange={e => setHolding(e.target.value)}>{sourceHoldings.map(h => <option key={h.id} value={h.id}>{h.symbol} — {ownerQuantity(h, SELF_ID).toLocaleString('ar-SA')}</option>)}</select></Field><Field label="المبلغ"><input value={quantity} onChange={e => setQuantity(e.target.value)} inputMode="decimal" /></Field></div>
-    <div className="divider">إلى</div><Field label="الحساب"><select value={targetAccountId} onChange={e => setTargetAccount(e.target.value)}>{accounts.filter(a => a.id !== sourceAccountId).map(a => <option key={a.id} value={a.id}>{accountLabel(state, a)}</option>)}</select></Field>
-    <button className="primary wide" type="submit">نقل الأموال</button>
+  return <FormShell title="نقل أموال" subtitle="اختر المصدر والوجهة عبر نفس شجرة المجموعات. تغيير المجموعة لا ينشئ حركة مالية."><form className="trade-form" onSubmit={submit}>
+    <div className="divider">من</div><AccountCascader state={state} accounts={sourceAccounts} value={sourceAccountId} onChange={setSourceAccount} label="حساب المصدر" />
+    <div className="field-grid"><Field label="الرصيد"><select value={holdingId} onChange={e => setHolding(e.target.value)}><option value="">اختر الرصيد</option>{sourceHoldings.map(h => <option key={h.id} value={h.id}>{h.symbol} — {ownerQuantity(h, SELF_ID).toLocaleString('ar-SA')}</option>)}</select></Field><Field label="المبلغ"><input value={quantity} onChange={e => setQuantity(e.target.value)} inputMode="decimal" /></Field></div>
+    <div className="divider">إلى</div><AccountCascader state={state} accounts={accounts.filter(a => a.id !== sourceAccountId)} value={targetAccountId} onChange={setTargetAccount} label="حساب الوجهة" />
+    <button className="primary wide" type="submit" disabled={!holdingId || !targetAccountId || !quantity.trim()}>نقل الأموال</button>
   </form></FormShell>
 }
 
