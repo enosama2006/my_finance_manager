@@ -9,23 +9,15 @@ export interface MyFinManSnapshot {
 }
 
 export function createSnapshot(state: FinanceState): MyFinManSnapshot {
-  return {
-    format: 'myfinman-snapshot',
-    version: 1,
-    exportedAt: new Date().toISOString(),
-    schemaVersion: state.schemaVersion,
-    state,
-  }
+  return { format: 'myfinman-snapshot', version: 1, exportedAt: new Date().toISOString(), schemaVersion: state.schemaVersion, state }
 }
 
 export function parseSnapshot(raw: string): FinanceState {
   const parsed = JSON.parse(raw) as Partial<MyFinManSnapshot>
   if (parsed.format !== 'myfinman-snapshot' || parsed.version !== 1 || !parsed.state) throw new Error('الملف ليس نسخة MyFinMan مدعومة')
   const state = parsed.state as FinanceState
-  if (state.schemaVersion !== 4) throw new Error(`إصدار البيانات ${state.schemaVersion} غير مدعوم في هذه النسخة`)
-  if (!Array.isArray(state.parties) || !Array.isArray(state.accounts) || !Array.isArray(state.holdings) || !Array.isArray(state.portfolios) || !Array.isArray(state.ledger)) {
-    throw new Error('ملف البيانات ناقص أو تالف')
-  }
+  if (state.schemaVersion !== 4 && state.schemaVersion !== 5) throw new Error(`إصدار البيانات ${state.schemaVersion} غير مدعوم في هذه النسخة`)
+  if (!Array.isArray(state.parties) || !Array.isArray(state.accounts) || !Array.isArray(state.holdings) || !Array.isArray(state.portfolios) || !Array.isArray(state.ledger)) throw new Error('ملف البيانات ناقص أو تالف')
   return state
 }
 
