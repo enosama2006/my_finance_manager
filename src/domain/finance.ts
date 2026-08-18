@@ -95,7 +95,7 @@ export function ownerCostBasisSar(holding: Holding, ownerId: string): number | n
   if (!lots.length) return null
   const totals = lots.map(lotCostBasisSar)
   if (totals.some((value) => value == null)) return null
-  return totals.reduce((sum, value) => sum + (value ?? 0), 0)
+  return totals.reduce<number>((sum, value) => sum + (value ?? 0), 0)
 }
 
 export function ownerWeightedAverageCostSar(holding: Holding, ownerId: string): number | null {
