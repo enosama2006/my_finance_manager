@@ -7,25 +7,14 @@ import { SpendExpense } from './SpendExpense'
 import { AccountGroups } from './AccountGroups'
 
 type Tab = 'general' | 'expense' | 'categories' | 'beneficiaries' | 'groups'
-
 const tabs: { id: Tab; label: string; sub: string; icon: typeof SlidersHorizontal }[] = [
-  { id: 'general', label: 'العمليات العامة', sub: 'حسابات، أرصدة، أصول، محافظ', icon: SlidersHorizontal },
-  { id: 'expense', label: 'تسجيل مصروف', sub: 'بند + مستفيد + حساب + محفظة', icon: ReceiptText },
+  { id: 'general', label: 'العمليات العامة', sub: 'أصول، أرصدة، شراء، نقل، محافظ', icon: SlidersHorizontal },
+  { id: 'expense', label: 'تسجيل مصروف', sub: 'بند + مستفيد + أصل دفع + محفظة', icon: ReceiptText },
   { id: 'categories', label: 'بنود الصرف', sub: 'شجرة + درجة ضرورة', icon: FolderTree },
   { id: 'beneficiaries', label: 'المستفيدون', sub: 'أنا، أفراد، عائلة، أطفال', icon: UsersRound },
-  { id: 'groups', label: 'مجموعات الحسابات', sub: 'تنظيم حر للحسابات', icon: WalletCards },
+  { id: 'groups', label: 'مجموعات الأصول', sub: 'الحاويات التنظيمية الوحيدة للأصول', icon: WalletCards },
 ]
-
 export function OperationsHub({ goTrade }: { goTrade: () => void }) {
   const [tab, setTab] = useState<Tab>('general')
-  return <div className="page-stack operations-hub">
-    <section className="operations-tabs" aria-label="أنواع العمليات">
-      {tabs.map(item => { const Icon = item.icon; return <button key={item.id} className={tab === item.id ? 'operations-tab active' : 'operations-tab'} onClick={() => setTab(item.id)}><Icon size={18}/><span><strong>{item.label}</strong><small>{item.sub}</small></span></button> })}
-    </section>
-    {tab === 'general' && <OperationsV2 goTrade={goTrade}/>} 
-    {tab === 'expense' && <SpendExpense/>}
-    {tab === 'categories' && <ExpenseCategories/>}
-    {tab === 'beneficiaries' && <ExpenseBeneficiaries/>}
-    {tab === 'groups' && <AccountGroups/>}
-  </div>
+  return <div className="page-stack operations-hub"><section className="operations-tabs" aria-label="أنواع العمليات">{tabs.map(item => { const Icon = item.icon; return <button key={item.id} className={tab === item.id ? 'operations-tab active' : 'operations-tab'} onClick={() => setTab(item.id)}><Icon size={18}/><span><strong>{item.label}</strong><small>{item.sub}</small></span></button> })}</section>{tab === 'general' && <OperationsV2 goTrade={goTrade}/>} {tab === 'expense' && <SpendExpense/>}{tab === 'categories' && <ExpenseCategories/>}{tab === 'beneficiaries' && <ExpenseBeneficiaries/>}{tab === 'groups' && <AccountGroups/>}</div>
 }
