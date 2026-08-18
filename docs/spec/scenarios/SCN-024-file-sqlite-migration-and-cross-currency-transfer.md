@@ -1,6 +1,6 @@
 # SCN-024 — Explicit migration to file-backed SQLite and cross-currency cash transfer
 
-Status: **Approved target / implementation in progress**
+Status: **Implemented / automated verification passed / awaiting real-use verification**
 Date: 2026-08-18
 Related: ADR-007, #52, #53, #33, #44
 
@@ -170,7 +170,7 @@ Expected:
 
 - source decreases by 50 USD;
 - target increases by 187.50 SAR;
-- `exchangeRate = 0.266666...?` only according to the chosen source-per-target convention when direction is USD→SAR (or the exact derived source units per target unit);
+- exchange rate is derived according to the source-per-target convention when the user enters target total;
 - `costBasisSar = null`;
 - target historical basis stays unknown;
 - no fabricated realized gain/loss based on current FX.
@@ -201,16 +201,23 @@ Voiding the FX transfer must:
 4. preserve Unknown if it was unknown;
 5. mark the transaction voided with audit revision rather than deleting history.
 
-## Acceptance result
+## Automated acceptance result
 
-The unified solution passes this scenario if:
+PR #54 verified:
 
-- file-backed SQLite becomes source of truth only after explicit migration;
-- legacy browser data is not destroyed during cut-over;
-- database collision prevents accidental overwrite;
-- same-currency and different-currency cash movements share one coherent transfer use case;
-- source total + target total + unit FX rate are mutually derivable as defined;
-- the two executed quantities and rate are persisted;
-- Cost Basis and current/reporting value do not collapse into one number;
-- correction/void operates on both legs and remains auditable;
-- Group→Cash Asset tree selection is used rather than flat account lists.
+- file-backed SQLite persists through actual close/reopen;
+- explicit migration and migration journal work;
+- duplicate migration is rejected rather than overwriting state;
+- same-currency transfer regression remains green;
+- source amount + unit rate derives target amount;
+- source amount + target total derives rate;
+- source/target quantities and rate are stored;
+- known historical basis carries into target and survives void;
+- Unknown basis remains Unknown through transfer and void;
+- Group→Cash Asset selectors are tree-first;
+- success reset and failure preservation are implemented;
+- TypeScript and Production Build pass.
+
+## Real-use verification still required
+
+The scenario is not yet marked fully Verified until the real browser snapshot is migrated with the temporary button into `data/myfinman.sqlite`, the application is restarted and reads that file, and the user completes at least one real cross-currency transfer and validates the displayed/stored quantities and rate.

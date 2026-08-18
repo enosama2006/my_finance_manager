@@ -1,6 +1,6 @@
 # ADR-007 — File-backed SQLite persistence and cross-currency cash transfers
 
-Status: **Approved direction / implementation in progress**
+Status: **Approved / Implemented / awaiting real-use verification**
 Date: 2026-08-18
 Related issues: #52, #53, #50, #33, #44
 Supersedes: browser SQLite/IndexedDB operational persistence introduced in PR #51
@@ -196,13 +196,14 @@ Void removes the target quantity and restores the source quantity with the histo
 
 ## Verification target
 
-- real file exists at `data/myfinman.sqlite` after server start;
-- database survives process restart;
-- explicit migration preserves the browser state and logs the event;
-- duplicate migration is rejected;
-- post-migration writes go to server SQLite;
-- Markdown export remains round-trip compatible;
-- SAR→SAR and SAR↔USD transfer scenarios pass;
-- enter-target and enter-rate modes derive each other;
-- exact/unknown historical basis survives transfer, correction and void;
-- production frontend build and automated tests remain green.
+Automated verification passed in PR #54:
+
+- file-backed SQLite survived actual close/reopen;
+- explicit migration wrote the state and migration journal;
+- duplicate migration was rejected;
+- Markdown migration round-trip remained compatible;
+- SAR→USD amount/rate derivation passed;
+- exact and unknown historical basis survived transfer and void;
+- TypeScript and production frontend build passed.
+
+The remaining lifecycle state is **real-use verification**: migrate the user's actual browser data with the temporary button, reopen MyFinMan from the SQLite file, and exercise a real cross-currency account transfer.
