@@ -1,10 +1,10 @@
-import { createContext, useContext, useMemo, useState, type ReactNode } from 'react'
+import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react'
 import type { ConversionInput, ExpenseCategory, FinanceState } from '../domain/types'
 import type { MarketQuote } from '../data/marketData'
 import { parseSnapshot } from '../data/snapshot'
 import { seedState } from '../data/seed'
 import { emptyState } from '../data/emptyState'
-import { createLocalStorageFinanceRepository } from '../data/localStorageRepository'
+import { createBrowserSqliteFinanceRepository } from '../data/sqliteRepository'
 import { runScenario, type ScenarioId } from './scenarios'
 import { applyManagedConversion } from './conversionPolicy'
 import { addExistingAsset, addFunds, allocateToPortfolio, createPortfolio, transferFunds, type AddFundsInput, type AllocateToPortfolioInput, type CreatePortfolioInput, type ExistingAssetInput, type TransferFundsInput } from './commands'
@@ -73,7 +73,7 @@ interface FinanceContextValue {
 }
 
 const FinanceContext = createContext<FinanceContextValue | null>(null)
-const repository = createLocalStorageFinanceRepository()
+const repository = createBrowserSqliteFinanceRepository()
 
 function materializeCategoryNecessity(categories: ExpenseCategory[]): ExpenseCategory[] {
   const byId = new Map(categories.map(c => [c.id, c]))
@@ -114,11 +114,29 @@ function normalize(state: FinanceState): FinanceState {
   const migrated = flattenLegacyAccountsToAssets(withInputs)
   return { ...migrated, schemaVersion: 5, accountGroups: migrated.accountGroups ?? [], expenseCategories: materializeCategoryNecessity(migrated.expenseCategories ?? []), expenseBeneficiaries: migrated.expenseBeneficiaries ?? [], positions: migrated.positions ?? [], capitalCycles: migrated.capitalCycles ?? [] }
 }
-function loadInitial() { return normalize(repository.load() ?? emptyState) }
 
 export function FinanceProvider({ children }: { children: ReactNode }) {
-  const [state, setState] = useState<FinanceState>(loadInitial)
-  const persist = (next: FinanceState) => { const normalized = normalize(next); setState(normalized); repository.save(normalized) }
+  const [state, setState] = useState<FinanceState>(emptyState)
+  const [ready, setReady] = useState(false)
+
+  useEffect(() => {
+    let active = true
+    void (async () => {
+      const loaded = await repository.load()
+      if (!active) return
+      const normalized = normalize(loaded ?? emptyState)
+      setState(normalized)
+      setReady(true)
+      await repository.save(normalized)
+    })()
+    return () => { active = false }
+  }, [])
+
+  const persist = (next: FinanceState) => {
+    const normalized = normalize(next)
+    setState(normalized)
+    void repository.save(normalized)
+  }
 
   const value = useMemo<FinanceContextValue>(() => ({
     state,
@@ -178,10 +196,11 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     reviseTransaction: input => persist(reviseTransaction(state, input)),
     importSnapshot: raw => persist(parseSnapshot(raw)),
     runScenario: id => persist(runScenario(state, id)),
-    loadDemo: () => { repository.clear(); persist(seedState) },
-    reset: () => { repository.clear(); persist(emptyState) },
+    loadDemo: () => { void repository.clear().then(() => persist(seedState)) },
+    reset: () => { void repository.clear().then(() => persist(emptyState)) },
   }), [state])
 
+  if (!ready) return <div className="app-stage"><div className="app-shell"><main className="main-area"><div className="content"><div className="panel empty-preview"><strong>جاري فتح قاعدة MyFinMan…</strong><span>تحميل SQLite وترحيل بيانات المتصفح القديمة إن وجدت.</span></div></div></main></div></div>
   return <FinanceContext.Provider value={value}>{children}</FinanceContext.Provider>
 }
 
