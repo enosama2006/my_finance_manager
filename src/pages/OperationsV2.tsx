@@ -22,11 +22,12 @@ const err = (error: unknown) => error instanceof Error ? error.message : 'تعذ
 type ActionKey = 'purchase' | 'asset' | 'funds' | 'transfer' | 'portfolio' | 'allocate'
 type NewAssetType = 'cash' | AssetTypeId
 type PurchaseTargetMode = 'new' | 'existing'
+type FxEntryMode = 'target_amount' | 'exchange_rate'
 const actions: { id: ActionKey; title: string; sub: string; icon: typeof ShoppingCart }[] = [
   { id: 'purchase', title: 'شراء أصل', sub: 'أصل نقدي ← أصل جديد أو زيادة أصل موجود', icon: ShoppingCart },
   { id: 'asset', title: 'إضافة أصل موجود', sub: 'سجّل ما تملكه الآن بأقل حقول ممكنة', icon: PackagePlus },
   { id: 'funds', title: 'إضافة أموال', sub: 'افتتاحي واحد أو دخل متكرر', icon: BanknoteArrowDown },
-  { id: 'transfer', title: 'نقل أموال', sub: 'أصل نقدي إلى أصل نقدي', icon: ArrowLeftRight },
+  { id: 'transfer', title: 'نقل أموال', sub: 'بين حسابات نقدية ولو اختلفت العملة', icon: ArrowLeftRight },
   { id: 'portfolio', title: 'إنشاء محفظة', sub: 'الغرض الاقتصادي مستقل', icon: FolderPlus },
   { id: 'allocate', title: 'تخصيص لمحفظة', sub: 'الغرض فقط بلا نقل الأصل', icon: Boxes },
 ]
@@ -56,7 +57,7 @@ export function OperationsV2({ goTrade }: { goTrade: () => void }) {
       {action === 'purchase' && <PurchaseForm state={state} groups={groups} portfolios={portfolios} onSubmit={input => execute(() => finance.purchaseAsset(input), `تم تسجيل شراء «${input.name}».`)}/>} 
       {action === 'asset' && <AssetForm groups={groups} owners={owners} onSubmit={input => execute(() => finance.createAsset(input), `تم إنشاء الأصل «${input.name}».`)}/>} 
       {action === 'funds' && <FundsForm state={state} owners={owners} assets={assets} onOpening={input => execute(() => finance.setAssetOpeningBalance(input), 'تم حفظ/تصحيح الرصيد الافتتاحي لنفس الأصل.')} onIncome={input => execute(() => finance.addIncomeToAsset(input), 'تم تسجيل الدخل وإضافته إلى الأصل النقدي.')}/>} 
-      {action === 'transfer' && <TransferForm owners={owners} assets={assets} onSubmit={input => execute(() => finance.transferBetweenAssets(input), 'تم النقل بين الأصلين دون ربح أو خسارة.')}/>} 
+      {action === 'transfer' && <TransferForm groups={groups} owners={owners} assets={assets} onSubmit={input => execute(() => finance.transferBetweenAssets(input), 'تم تسجيل نقل الأموال وحفظ كميات المصدر والوجهة وسعر التحويل.')}/>} 
       {action === 'portfolio' && <PortfolioForm owners={owners} portfolios={portfolios} onSubmit={input => execute(() => finance.createPortfolio(input), 'تم إنشاء المحفظة.')}/>} 
       {action === 'allocate' && <AllocateForm state={state} owners={owners} assets={assets.filter(h => h.quantity > 0)} portfolios={portfolios} onSubmit={input => execute(() => finance.allocateToPortfolio(input), 'تم التخصيص دون تغيير تموضع الأصل.')}/>} 
     </div><aside className="operation-help"><CirclePlus size={20}/><strong>القاعدة</strong><p>{helpFor(action)}</p><div className="operation-rule"><span>إعادة تسمية الأصل أو نقله بين المجموعات تنظيم فقط. تغيير الكمية أو المالك أو حركة سابقة هو تصحيح مالي يُحفظ أثره.</span></div></aside></section>
@@ -209,11 +210,77 @@ function FundsForm({ state, owners, assets, onOpening, onIncome }: { state: Fina
   return <FormShell title="إضافة أموال" subtitle="اختر الأصل النقدي مباشرة. الرصيد الافتتاحي واحد ويُصحح بدل تكراره."><form className="trade-form" onSubmit={submit}><Field label="الأصل النقدي"><select value={assetId} onChange={e => setAsset(e.target.value)}><option value="">اختر الأصل</option>{cash.map(a => <option key={a.id} value={a.id}>{a.name} — {a.symbol}</option>)}</select></Field><div className="field-grid"><Field label="المالك"><select value={ownerId} onChange={e => setOwner(e.target.value)}>{owners.map(o => <option key={o.id} value={o.id}>{o.name}</option>)}</select></Field><Field label="النوع"><select value={kind} onChange={e => setKind(e.target.value as 'opening'|'income')}><option value="opening">رصيد افتتاحي / تصحيح</option><option value="income">دخل جديد</option></select></Field></div><Field label={`المبلغ ${asset ? `(${asset.nativeUnit})` : ''}`}><input value={quantity} onChange={e => setQuantity(e.target.value)} inputMode="decimal"/></Field><Field label="العنوان (اختياري)"><input value={title} onChange={e => setTitle(e.target.value)}/></Field><button className="primary wide" disabled={!assetId} type="submit">{kind === 'opening' ? 'حفظ الرصيد الافتتاحي' : 'إضافة الدخل'}</button></form></FormShell>
 }
 
-function TransferForm({ owners, assets, onSubmit }: { owners: Party[]; assets: Holding[]; onSubmit: (i: TransferBetweenAssetsInput) => void }) {
-  const cash = assets.filter(a => a.kind === 'cash'); const [ownerId, setOwner] = useState(owners.find(o => o.id === SELF_ID)?.id ?? owners[0]?.id ?? ''); const [source, setSource] = useState(''); const sourceAsset = cash.find(a => a.id === source); const targets = cash.filter(a => a.id !== source && (!sourceAsset || a.symbol.toUpperCase() === sourceAsset.symbol.toUpperCase())); const [target, setTarget] = useState(''); const [quantity, setQuantity] = useState('')
-  useEffect(() => { if (!targets.some(a => a.id === target)) setTarget('') }, [source])
-  const submit = (e: FormEvent) => { e.preventDefault(); onSubmit({ sourceAssetId: source, targetAssetId: target, ownerId, quantity: num(quantity) }); setQuantity('') }
-  return <FormShell title="نقل أموال" subtitle="النقل بين أصلين نقديين بنفس العملة؛ تموضعهما في المجموعات لا يتغير."><form className="trade-form" onSubmit={submit}><Field label="المالك"><select value={ownerId} onChange={e => setOwner(e.target.value)}>{owners.map(o => <option key={o.id} value={o.id}>{o.name}</option>)}</select></Field><Field label="من أصل"><select value={source} onChange={e => setSource(e.target.value)}><option value="">اختر المصدر</option>{cash.filter(a => ownerQuantity(a, ownerId)>0).map(a => <option key={a.id} value={a.id}>{a.name} — {ownerQuantity(a,ownerId).toLocaleString('ar-SA')} {a.nativeUnit}</option>)}</select></Field><Field label="إلى أصل"><select value={target} onChange={e => setTarget(e.target.value)}><option value="">اختر الوجهة</option>{targets.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}</select></Field><Field label="المبلغ"><input value={quantity} onChange={e => setQuantity(e.target.value)} inputMode="decimal"/></Field><button className="primary wide" disabled={!source || !target} type="submit">نقل الأموال</button></form></FormShell>
+function TransferForm({ groups, owners, assets, onSubmit }: { groups: FinanceState['accountGroups']; owners: Party[]; assets: Holding[]; onSubmit: (i: TransferBetweenAssetsInput) => boolean }) {
+  const cash = assets.filter(a => a.kind === 'cash')
+  const [ownerId, setOwner] = useState(owners.find(o => o.id === SELF_ID)?.id ?? owners[0]?.id ?? '')
+  const [source, setSource] = useState('')
+  const [target, setTarget] = useState('')
+  const [quantity, setQuantity] = useState('')
+  const [fxEntryMode, setFxEntryMode] = useState<FxEntryMode>('target_amount')
+  const [targetAmount, setTargetAmount] = useState('')
+  const [exchangeRate, setExchangeRate] = useState('')
+  const [resetKey, setResetKey] = useState(0)
+  const sourceAsset = cash.find(a => a.id === source)
+  const targetAsset = cash.find(a => a.id === target)
+  const differentCurrency = Boolean(sourceAsset && targetAsset && sourceAsset.symbol.toUpperCase() !== targetAsset.symbol.toUpperCase())
+  const sourceQuantity = num(quantity || '0')
+  const enteredTarget = num(targetAmount || '0')
+  const enteredRate = num(exchangeRate || '0')
+  const derivedTarget = differentCurrency ? (fxEntryMode === 'target_amount' ? enteredTarget : enteredRate > 0 ? sourceQuantity / enteredRate : 0) : sourceQuantity
+  const derivedRate = differentCurrency ? (fxEntryMode === 'exchange_rate' ? enteredRate : enteredTarget > 0 ? sourceQuantity / enteredTarget : 0) : 1
+  const validFx = !differentCurrency || (derivedTarget > 0 && derivedRate > 0)
+
+  useEffect(() => {
+    if (target === source) setTarget('')
+    setTargetAmount('')
+    setExchangeRate('')
+  }, [source])
+
+  useEffect(() => {
+    setTargetAmount('')
+    setExchangeRate('')
+  }, [target, fxEntryMode])
+
+  const reset = () => {
+    setSource(''); setTarget(''); setQuantity(''); setTargetAmount(''); setExchangeRate(''); setFxEntryMode('target_amount'); setResetKey(k => k + 1)
+  }
+
+  const submit = (e: FormEvent) => {
+    e.preventDefault()
+    const input: TransferBetweenAssetsInput = {
+      sourceAssetId: source,
+      targetAssetId: target,
+      ownerId,
+      quantity: sourceQuantity,
+      targetQuantity: differentCurrency && fxEntryMode === 'target_amount' ? enteredTarget : undefined,
+      exchangeRate: differentCurrency && fxEntryMode === 'exchange_rate' ? enteredRate : undefined,
+    }
+    if (onSubmit(input)) reset()
+  }
+
+  const sourceEligible = (asset: Holding) => asset.kind === 'cash' && ownerQuantity(asset, ownerId) > 0
+  const targetEligible = (asset: Holding) => asset.kind === 'cash' && asset.id !== source
+
+  return <FormShell title="نقل أموال" subtitle="انقل بين حسابات نقدية بأي عملة. عند اختلاف العملة أدخل المبلغ النهائي أو سعر التحويل، وسيشتق النظام الآخر ويحفظ الاثنين."><form className="trade-form" onSubmit={submit}>
+    <Field label="المالك"><select value={ownerId} onChange={e => { setOwner(e.target.value); reset() }}>{owners.map(o => <option key={o.id} value={o.id}>{o.name}</option>)}</select></Field>
+    <GroupAssetCascader key={`transfer-source-${ownerId}-${resetKey}`} groups={groups ?? []} assets={cash} value={source} onChange={setSource} isEligible={sourceEligible} label="من حساب / أصل نقدي" placeholder="اختر المصدر من الشجرة"/>
+    <GroupAssetCascader key={`transfer-target-${source}-${resetKey}`} groups={groups ?? []} assets={cash} value={target} onChange={setTarget} isEligible={targetEligible} label="إلى حساب / أصل نقدي" placeholder="اختر الوجهة من الشجرة"/>
+    <Field label={`المبلغ المخصوم من المصدر${sourceAsset ? ` (${sourceAsset.symbol})` : ''}`}><input value={quantity} onChange={e => setQuantity(e.target.value)} inputMode="decimal"/></Field>
+
+    {differentCurrency && sourceAsset && targetAsset && <>
+      <Field label="طريقة إدخال التحويل"><select value={fxEntryMode} onChange={e => setFxEntryMode(e.target.value as FxEntryMode)}><option value="target_amount">أدخل المبلغ النهائي في حساب الوجهة</option><option value="exchange_rate">أدخل سعر الوحدة / سعر التحويل</option></select></Field>
+      {fxEntryMode === 'target_amount'
+        ? <Field label={`المبلغ المستلم (${targetAsset.symbol})`}><input value={targetAmount} onChange={e => setTargetAmount(e.target.value)} inputMode="decimal" placeholder="مثال: 266.67"/></Field>
+        : <Field label={`سعر التحويل — ${sourceAsset.symbol} لكل 1 ${targetAsset.symbol}`}><input value={exchangeRate} onChange={e => setExchangeRate(e.target.value)} inputMode="decimal" placeholder="مثال: 3.75"/></Field>}
+      <div className="purchase-summary">
+        <Summary label="من المصدر" value={sourceQuantity > 0 ? `${sourceQuantity.toLocaleString('ar-SA', { maximumFractionDigits: 8 })} ${sourceAsset.symbol}` : '—'}/>
+        <Summary label="إلى الوجهة" value={derivedTarget > 0 ? `${derivedTarget.toLocaleString('ar-SA', { maximumFractionDigits: 8 })} ${targetAsset.symbol}` : '—'}/>
+        <Summary label="سعر التحويل" value={derivedRate > 0 ? `${derivedRate.toLocaleString('ar-SA', { maximumFractionDigits: 8 })} ${sourceAsset.symbol}/${targetAsset.symbol}` : '—'}/>
+      </div>
+    </>}
+
+    <button className="primary wide" disabled={!source || !target || sourceQuantity <= 0 || !validFx} type="submit">{differentCurrency ? 'نقل وتحويل الأموال' : 'نقل الأموال'}</button>
+  </form></FormShell>
 }
 
 function PortfolioForm({ owners, portfolios, onSubmit }: { owners: Party[]; portfolios: Portfolio[]; onSubmit: (input: CreatePortfolioInput) => void }) {
@@ -231,4 +298,4 @@ function FormShell({ title, subtitle, children }: { title: string; subtitle: str
 function Field({ label, children }: { label: string; children: ReactNode }) { return <label><span>{label}</span>{children}</label> }
 function Summary({label,value}:{label:string;value:string}){return <div className="purchase-summary-item"><span>{label}</span><strong>{value}</strong></div>}
 function EmptyAction({title,text}:{title:string;text:string}){return <div className="panel empty-preview"><CirclePlus/><strong>{title}</strong><span>{text}</span></div>}
-function helpFor(action: ActionKey){return ({purchase:'اختر أصل الدفع من الشجرة. يمكن للشراء إنشاء حيازة جديدة أو إضافة Lot مستقل إلى أصل موجود دون دمج تلقائي.',asset:'سجّل الأصل الموجود بأقل بيانات لازمة. البنك أو نوع الحساب خصائص للأصل النقدي وليسا حاوية مستقلة.',funds:'الرصيد الافتتاحي مرتبط بالأصل نفسه ويسجل مرة واحدة؛ الدخل حركة متكررة.',transfer:'النقل يحدث من أصل نقدي إلى أصل نقدي آخر بنفس العملة.',portfolio:'المحفظة غرض اقتصادي مستقل عن شجرة المجموعات.',allocate:'التخصيص يغير الغرض لا التموضع التنظيمي.'} as Record<ActionKey,string>)[action]}
+function helpFor(action: ActionKey){return ({purchase:'اختر أصل الدفع من الشجرة. يمكن للشراء إنشاء حيازة جديدة أو إضافة Lot مستقل إلى أصل موجود دون دمج تلقائي.',asset:'سجّل الأصل الموجود بأقل بيانات لازمة. البنك أو نوع الحساب خصائص للأصل النقدي وليسا حاوية مستقلة.',funds:'الرصيد الافتتاحي مرتبط بالأصل نفسه ويسجل مرة واحدة؛ الدخل حركة متكررة.',transfer:'المصدر والوجهة أصول نقدية نهائية من الشجرة. إذا اختلفت العملة تحفظ الحركة مبلغ المصدر ومبلغ الوجهة وسعر التحويل دون تخمين.',portfolio:'المحفظة غرض اقتصادي مستقل عن شجرة المجموعات.',allocate:'التخصيص يغير الغرض لا التموضع التنظيمي.'} as Record<ActionKey,string>)[action]}
