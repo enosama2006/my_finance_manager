@@ -8,7 +8,7 @@ const baseConversion = {
   targetAccountId: 'acc-alrajhi', targetCustodianId: 'party-alrajhi', targetLocation: 'جاري الراجحي',
 }
 
-describe('MyFinMan Foundation V4 invariants', () => {
+describe('MyFinMan domain behavioural checks', () => {
   it('bank account is a container while the balance inside it is a cash asset', () => {
     const account = seedState.accounts.find(a => a.id === 'acc-alrajhi')!
     const holding = seedState.holdings.find(h => h.id === 'h-alrajhi-sar')!
