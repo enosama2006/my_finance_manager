@@ -2,6 +2,7 @@ import { Banknote, Boxes, CircleAlert, ReceiptText, UserRound } from 'lucide-rea
 import { useMemo, useState, type FormEvent } from 'react'
 import { useFinance } from '../application/store'
 import { useToast } from '../components/ToastProvider'
+import { useSuccessDialog } from '../components/SuccessDialog'
 import { availableQuantity, ownerQuantity, round2 } from '../domain/finance'
 import type { ExpenseCategory, ExpenseNecessity } from '../domain/types'
 import { SELF_ID } from '../data/seed'
@@ -12,11 +13,24 @@ function categoryPath(all: ExpenseCategory[], id?: string): ExpenseCategory[] { 
 function effectiveNecessity(all: ExpenseCategory[], id?: string): ExpenseNecessity | undefined { const path=categoryPath(all,id);for(let i=path.length-1;i>=0;i-=1)if(path[i].defaultNecessity)return path[i].defaultNecessity;return undefined }
 
 export function SpendExpense(){
-  const finance=useFinance();const toast=useToast();const {state}=finance
+  const finance=useFinance();const toast=useToast();const successDialog=useSuccessDialog();const {state}=finance
   const owners=state.parties.filter(p=>p.type==='self'||p.type==='person');const categories=(state.expenseCategories??[]).filter(c=>c.status==='active');const beneficiaries=(state.expenseBeneficiaries??[]).filter(b=>b.status==='active')
   const [ownerId,setOwnerId]=useState(owners.find(o=>o.id===SELF_ID)?.id??owners[0]?.id??'');const cashAssets=useMemo(()=>state.holdings.filter(h=>!h.archived&&h.kind==='cash'&&ownerQuantity(h,ownerId)>0),[state.holdings,ownerId]);const portfolios=state.portfolios.filter(p=>p.status==='active'&&p.ownerIds.includes(ownerId));const [sourceHoldingId,setSourceHoldingId]=useState('');const [categoryId,setCategoryId]=useState('');const [portfolioId,setPortfolioId]=useState('');const [beneficiaryId,setBeneficiaryId]=useState('');const [necessityOverride,setNecessityOverride]=useState<ExpenseNecessity|''>('');const [quantity,setQuantity]=useState('');const [title,setTitle]=useState('');const [note,setNote]=useState('')
   const source=cashAssets.find(h=>h.id===sourceHoldingId);const amount=Number(quantity.replace(/,/g,''))||0;const amountSar=source?round2(amount*source.marketPriceSar):0;const freeQty=source?availableQuantity(state,source.id,ownerId):0;const portfolioValue=portfolioId?round2(state.portfolioSlices.filter(s=>s.portfolioId===portfolioId&&s.ownerId===ownerId).reduce((sum,s)=>{const h=state.holdings.find(x=>x.id===s.holdingId&&!x.archived);return sum+(h?s.quantity*h.marketPriceSar:0)},0)):0;const inheritedNecessity=effectiveNecessity(categories,categoryId);const finalNecessity=necessityOverride||inheritedNecessity;const beneficiary=beneficiaries.find(b=>b.id===beneficiaryId);const prerequisitesMissing=categories.length===0||cashAssets.length===0
-  const submit=(event:FormEvent)=>{event.preventDefault();try{finance.spendExpense({sourceHoldingId,ownerId,quantity:amount,expenseCategoryId:categoryId,portfolioId:portfolioId||undefined,expenseBeneficiaryId:beneficiaryId||undefined,expenseNecessity:necessityOverride||undefined,title:title||undefined,note:note||undefined});setQuantity('');setTitle('');setNote('');setNecessityOverride('');toast.success(portfolioId?'تم تسجيل المصروف وخصمه من الأصل النقدي والمحفظة.':'تم تسجيل المصروف وخصمه من الأصل النقدي.')}catch(error){toast.error(error instanceof Error?error.message:'تعذر تسجيل المصروف')}}
+  // Preserve owner, source asset, category, portfolio, beneficiary — the "context" of a spending
+  // session — and reset only per-entry fields (amount, title, note, one-off necessity override)
+  // so back-to-back expenses in the same category/portfolio are one keystroke each.
+  const submit=async(event:FormEvent)=>{
+    event.preventDefault()
+    try{
+      finance.spendExpense({sourceHoldingId,ownerId,quantity:amount,expenseCategoryId:categoryId,portfolioId:portfolioId||undefined,expenseBeneficiaryId:beneficiaryId||undefined,expenseNecessity:necessityOverride||undefined,title:title||undefined,note:note||undefined})
+    }catch(error){
+      toast.error(error instanceof Error?error.message:'تعذر تسجيل المصروف')
+      return
+    }
+    await successDialog.show({message:portfolioId?'تم تسجيل المصروف وخصمه من الأصل النقدي والمحفظة. الفئة والأصل والمحفظة محفوظون — أدخل المصروف التالي.':'تم تسجيل المصروف وخصمه من الأصل النقدي. الفئة والأصل محفوظان — أدخل المصروف التالي.'})
+    setQuantity('');setTitle('');setNote('');setNecessityOverride('')
+  }
   return <div className="page-stack"><section className="section-intro"><div><span className="eyebrow">WHAT + SOURCE ASSET + WHY + WHO</span><h2>تسجيل مصروف</h2><p>بند الصرف يحدد «على ماذا؟»، أصل الدفع «من أين خرج المال؟»، المحفظة «لأي غرض؟»، والمستفيد «لصالح من؟».</p></div></section>{prerequisitesMissing&&<section className="panel prerequisite-note"><CircleAlert size={20}/><div><strong>قبل أول مصروف</strong><p>{categories.length===0?'أنشئ بند صرف واحدًا على الأقل. ':''}{cashAssets.length===0?'وأنشئ أصلًا نقديًا ذا رصيد.':''}</p></div></section>}
   <section className="operation-workspace"><div className="operation-form-panel"><div className="panel operation-form"><div className="panel-head"><div><span>حركة مالية فعلية</span><h2>بيانات عملية الصرف</h2><span>الخصم يتم من الأصل النقدي مباشرة؛ المجموعة التنظيمية لا تدخل في القيد.</span></div><ReceiptText size={18}/></div><form className="trade-form" onSubmit={submit}>
   <div className="field-grid"><label><span>المالك</span><select value={ownerId} onChange={e=>{setOwnerId(e.target.value);setSourceHoldingId('');setPortfolioId('')}}>{owners.map(o=><option key={o.id} value={o.id}>{o.name}</option>)}</select></label><label><span>المستفيد</span><select value={beneficiaryId} onChange={e=>setBeneficiaryId(e.target.value)}><option value="">غير محدد</option>{beneficiaries.map(b=><option key={b.id} value={b.id}>{b.name} — {b.kind==='group'?'مجموعة':'فرد'}</option>)}</select><small>المستفيد مستقل عن المالك والدافع.</small></label></div>
