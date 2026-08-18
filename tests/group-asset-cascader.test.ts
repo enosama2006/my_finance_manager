@@ -14,10 +14,11 @@ function asset(id: string, name: string, groupId?: string): Holding {
 const assets = [asset('a-root', 'نقد حر'), asset('a-rajhi', 'جاري الراجحي', 'g-rajhi'), asset('a-invest', 'سيولة استثمارية', 'g-invest')]
 
 describe('GroupAssetCascader tree levels', () => {
-  it('shows root groups and ungrouped assets at the root only', () => {
+  it('shows root groups and ungrouped assets at the root only with deterministic Arabic sorting', () => {
     const levels = buildGroupAssetLevels(groups, assets, [])
     expect(levels).toHaveLength(1)
-    expect(levels[0].groups.map(g => g.id)).toEqual(['g-bank', 'g-invest'])
+    const expectedNames = ['البنوك', 'الاستثمارات'].sort((a, b) => a.localeCompare(b, 'ar'))
+    expect(levels[0].groups.map(g => g.name)).toEqual(expectedNames)
     expect(levels[0].assets.map(a => a.id)).toEqual(['a-root'])
   })
 
