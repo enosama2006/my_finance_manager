@@ -1,7 +1,8 @@
 import type { FinanceState } from '../domain/types'
 
 /**
- * Persistence is asynchronous because the primary browser store is SQLite persisted through IndexedDB.
+ * Durable persistence is asynchronous because the browser talks to a local MyFinMan API,
+ * which owns the real file-backed SQLite database on disk.
  * Domain/application commands remain synchronous and pure; only durable I/O is async.
  */
 export interface FinanceRepository {
